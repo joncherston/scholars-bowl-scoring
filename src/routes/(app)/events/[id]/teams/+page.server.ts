@@ -14,7 +14,7 @@ export function load({ locals, params, url }) {
 	const teams = listTeams(id).map((t) => ({
 		...t,
 		players: db.select({ n: count() }).from(schema.rosterEntries).where(and(eq(schema.rosterEntries.teamId, t.id), eq(schema.rosterEntries.removed, false))).get()!.n,
-		playerNames: teamRoster(t.id).map(playerDisplayName),
+		roster: teamRoster(t.id).map((p) => ({ id: p.id, name: playerDisplayName(p), grade: p.grade })),
 		games: db.select({ n: count() }).from(schema.matches).where(or(eq(schema.matches.teamAId, t.id), eq(schema.matches.teamBId, t.id))).get()!.n
 	}));
 	return { teams, sessionList: listSessions(id) };

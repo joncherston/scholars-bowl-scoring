@@ -98,9 +98,12 @@ test('check-in enforces the six-player roster limit', async ({ browser }) => {
 
 	// The Teams tab lists the players and links straight to that team at check-in.
 	await page.goto(`/events/${team.event_id}/teams`);
-	const row = page.locator('tr', { hasText: 'Pinecrest Academy' });
-	await expect(row.getByText('Test1 Player, Test2 Player')).toBeVisible();
-	await row.getByRole('link', { name: 'Edit players' }).click();
+	// Names stay hidden until the team (or its player count) is clicked.
+	await expect(page.getByText('Test1 Player')).toHaveCount(0);
+	await page.getByRole('button', { name: '6 players' }).click();
+	await expect(page.getByText('Test1 Player')).toBeVisible();
+	await expect(page.getByText('Test6 Player')).toBeVisible();
+	await page.getByRole('link', { name: 'Edit players' }).click();
 	await expect(page.getByRole('heading', { name: 'Pinecrest Academy' })).toBeVisible();
 	await expect(page.getByText('6 of 6')).toBeVisible();
 	await admin.close();

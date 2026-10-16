@@ -1,6 +1,9 @@
 <script lang="ts">
 	let { data, form } = $props();
 	let editing = $state<number | null>(null);
+	// Teams whose player list is shown (hidden until the team or its player count is clicked).
+	let openIds = $state<number[]>([]);
+	const toggle = (id: number) => (openIds = openIds.includes(id) ? openIds.filter((x) => x !== id) : [...openIds, id]);
 	let filter = $state('');
 	let showAdd = $state(false);
 
@@ -115,18 +118,21 @@
 									</td>
 								</tr>
 							{:else}
-								<tr class:withdrawn={t.withdrawn}>
+								{@const isOpen = openIds.includes(t.id)}
+								<tr class:withdrawn={t.withdrawn} class:open={isOpen}>
 									<td>
-										<strong>{t.name}</strong>
+										<button class="reveal" type="button" aria-expanded={isOpen} aria-controls="roster-{t.id}" onclick={() => toggle(t.id)}>
+											<span class="caret" aria-hidden="true">{isOpen ? '▾' : '▸'}</span><strong>{t.name}</strong>
+										</button>
 										{#if t.source !== 'manual'}<div class="muted small">Registration #{t.registrationId}</div>{/if}
 									</td>
 									<td>{t.classification}</td>
 									<td class="small">{t.contactName ?? ''}{#if t.contactEmail}<div class="muted">{t.contactEmail}</div>{/if}</td>
 									<td class="num">{t.competingStudents ?? '—'}</td>
-									<td class="players">
-										<span class="num">{t.players}</span>
-										{#if t.playerNames.length}<div class="small names">{t.playerNames.join(', ')}</div>{/if}
-										<a class="small" href="/events/{data.event.id}/checkin?session={t.sessionId ?? ''}&team={t.id}">{t.players ? 'Edit players' : 'Add players'}</a>
+									<td>
+										<button class="reveal count" type="button" aria-expanded={isOpen} aria-controls="roster-{t.id}" onclick={() => toggle(t.id)}>
+											{t.players} {t.players === 1 ? 'player' : 'players'}
+										</button>
 									</td>
 									<td>
 										{#if t.withdrawn}<span class="badge bad">Withdrawn</span>
@@ -136,6 +142,20 @@
 									</td>
 									<td><button class="btn small secondary" type="button" onclick={() => (editing = t.id)}>Edit</button></td>
 								</tr>
+								{#if isOpen}
+									<tr class="roster-row" id="roster-{t.id}">
+										<td colspan="7">
+											{#if t.roster.length}
+												<ol class="roster">
+													{#each t.roster as p (p.id)}<li>{p.name}{#if p.grade}<span class="muted small"> · grade {p.grade}</span>{/if}</li>{/each}
+												</ol>
+											{:else}
+												<p class="muted small">No players entered yet.</p>
+											{/if}
+											<a class="btn small" href="/events/{data.event.id}/checkin?session={t.sessionId ?? ''}&team={t.id}">{t.roster.length ? 'Edit players' : 'Add players'}</a>
+										</td>
+									</tr>
+								{/if}
 							{/if}
 						{/each}
 					</tbody>
@@ -151,11 +171,42 @@
 	tr.withdrawn td {
 		color: var(--muted);
 	}
-	td.players {
-		max-width: 320px;
+	.reveal {
+		border: 0;
+		background: none;
+		padding: 0;
+		font: inherit;
+		color: inherit;
+		cursor: pointer;
+		text-align: left;
 	}
-	.names {
-		color: var(--text);
+	.reveal:hover strong,
+	.reveal.count:hover {
+		color: var(--primary);
+		text-decoration: underline;
+	}
+	.reveal.count {
+		color: var(--primary);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.caret {
+		display: inline-block;
+		width: 1.1em;
+		color: var(--muted);
+	}
+	tr.open td {
+		border-bottom-color: transparent;
+	}
+	.roster-row td {
+		background: var(--surface-2);
+		padding: 8px 12px 12px 34px;
+	}
+	.roster {
+		margin: 0 0 10px;
+		padding-left: 20px;
+		columns: 2;
+		max-width: 640px;
 	}
 	tr.withdrawn strong {
 		text-decoration: line-through;
