@@ -40,6 +40,26 @@
 	</div>
 
 	<div class="card">
+		<h2>Website connection</h2>
+		<p class="muted small">Lets the import page pull registrations straight from the registration website instead of uploading a CSV. Needs plugin version 1.0.7 or later on the website. Off until a token is saved and the box is checked.</p>
+		<form method="POST" action="?/website" class="grid cols-3">
+			<div class="field"><label for="wp-url">Website address</label><input id="wp-url" name="url" type="url" placeholder="https://suscholarsbowl.com" value={data.website?.url ?? ''} required /></div>
+			<div class="field">
+				<label for="wp-token">API token <span class="hint">{data.website?.tokenSet ? `(saved, ends in …${data.website.tokenHint}; leave blank to keep)` : '(from the website: Scholars\' Bowl → API Access)'}</span></label>
+				<input id="wp-token" name="token" type="password" autocomplete="off" />
+				{#if data.website?.tokenSet}<label class="check small"><input type="checkbox" name="clearToken" /> Remove the saved token</label>{/if}
+			</div>
+			<div class="field">
+				<label class="check" style="margin-top: 26px"><input type="checkbox" name="enabled" checked={data.website?.enabled ?? false} /> Use the website connection</label>
+			</div>
+			<div class="row"><button class="btn" type="submit">Save</button></div>
+		</form>
+		{#if data.website?.tokenSet}
+			<form method="POST" action="?/testWebsite" style="margin-top: 8px"><button class="btn secondary" type="submit">Test the connection</button></form>
+		{/if}
+	</div>
+
+	<div class="card">
 		<h2>Accounts</h2>
 		<p class="muted small">Event staff are usually added from an event's Setup → Staff page. Use this list to reset passwords and manage administrators.</p>
 		<table class="data">

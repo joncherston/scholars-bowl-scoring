@@ -26,6 +26,7 @@
 	});
 	const payload = $derived(
 		JSON.stringify({
+			source: form && 'source' in form ? form.source : 'csv',
 			filename: form && 'filename' in form ? form.filename : '',
 			sha256: form && 'sha256' in form ? form.sha256 : '',
 			rows: approved.map((r) => ({
@@ -176,7 +177,20 @@
 		</form>
 		<div class="card" style="max-width: 720px">
 			<h3>Pull from the website</h3>
-			<p class="muted small">Available after the registration plugin is updated to version 1.0.7 and connected in Admin settings.</p>
+			{#if !data.website}
+				<p class="muted small">Needs registration plugin 1.0.7 or later on the website, connected in <a href="/admin">Admin → Website connection</a>.</p>
+			{:else if data.website.error}
+				<div class="alert error small">{data.website.error}</div>
+			{:else}
+				<form method="POST" action="?/pull" class="row" use:enhance={submitting}>
+					<label for="wpEventId" class="sr-only">Website event</label>
+					<select id="wpEventId" name="wpEventId" value={data.website.suggested ?? ''} style="max-width: 420px">
+						{#each data.website.events as e (e.id)}<option value={e.id}>{e.name}{e.date ? ` (${e.date})` : ''}</option>{/each}
+					</select>
+					<button class="btn" type="submit" disabled={busy}>Preview from the website</button>
+				</form>
+				<p class="muted small" style="margin-top: 8px">Reads the registrations for that event directly. Registrations made in test mode are left unchecked.</p>
+			{/if}
 		</div>
 	{/if}
 </div>

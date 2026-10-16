@@ -42,6 +42,8 @@ describe('plugin CSV import', () => {
 		expect(cedar.registeredAt).toBe('2026-09-22 13:01:38');
 		expect(cedar.contactEmail).toBe('morgan@cedarhollow.example');
 		expect(normalizeDate('10/5/2026 9:30')).toBe('2026-10-05 09:30:00');
+		// A zero date means "not recorded", so the year cutoff must not skip the row.
+		expect(normalizeDate('0000-00-00 00:00:00')).toBeNull();
 	});
 
 	it('handles a byte-order mark and Windows line endings', () => {
@@ -158,5 +160,15 @@ describe('plugin CSV import', () => {
 		const { mapping, pluginLayout } = detectMapping(['Team', 'Class', 'Coach Email', 'Session', 'Registration Date']);
 		expect(pluginLayout).toBe(false);
 		expect(mapping).toMatchObject({ schoolName: 'Team', classification: 'Class', contactEmail: 'Coach Email', session: 'Session' });
+	});
+});
+
+describe('plugin 1.0.6 export quirk', () => {
+	it('skips the WordPress admin page HTML that comes before the CSV rows', () => {
+		const withHtml = `<!DOCTYPE html>\n<html class="wp-toolbar"><head><title>Registrations</title></head><body><div id="wpwrap">…</div>\n${csv}`;
+		const { headers, records, errors } = parseCsv(withHtml);
+		expect(errors).toEqual([]);
+		expect(detectMapping(headers).pluginLayout).toBe(true);
+		expect(records).toHaveLength(11);
 	});
 });

@@ -5,14 +5,26 @@ import { eventIdParam, getEvent, listSessions, normalizeClassification } from '$
 import { requireAdmin } from '$lib/server/guard';
 import { buildPreview, detectMapping, FIELDS, parseCsv, toRows, type ColumnMapping, type FieldKey } from '$lib/server/registrations';
 import { createTeam } from '$lib/server/teams';
+import { getWpSettings, wpEvents, wpRegistrations, WpError, type WpEvent } from '$lib/server/wordpress';
 import { fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import crypto from 'node:crypto';
 
-export function load({ locals, url, params }) {
+export async function load({ locals, url, params }) {
 	requireAdmin(locals.auth, url);
 	const event = getEvent(eventIdParam(params));
-	return { defaultCutoff: `${event.eventDate.slice(0, 4)}-01-01`, fields: FIELDS };
+	const wp = getWpSettings();
+	let website: { events: WpEvent[]; suggested: number | null; error: string | null } | null = null;
+	if (wp?.enabled && wp.token) {
+		try {
+			const events = await wpEvents(wp);
+			const suggested = events.find((e) => e.date === event.eventDate) ?? events.find((e) => e.date?.slice(0, 4) === event.eventDate.slice(0, 4)) ?? events[0];
+			website = { events, suggested: suggested?.id ?? null, error: null };
+		} catch (e) {
+			website = { events: [], suggested: null, error: e instanceof WpError ? e.message : 'Could not reach the website.' };
+		}
+	}
+	return { defaultCutoff: `${event.eventDate.slice(0, 4)}-01-01`, fields: FIELDS, website };
 }
 
 function existingTeams(eventId: number) {
@@ -60,6 +72,7 @@ export const actions = {
 		const preview = buildPreview(rows, existingTeams(eventId), sessions, cutoff);
 		return {
 			stage: 'preview' as const,
+			source: 'csv' as const,
 			preview,
 			pluginLayout: detected.pluginLayout,
 			parseErrors: errors,
@@ -69,12 +82,40 @@ export const actions = {
 		};
 	},
 
+	pull: async ({ request, locals, params }) => {
+		requireAdmin(locals.auth);
+		const eventId = eventIdParam(params);
+		const event = getEvent(eventId);
+		const wp = getWpSettings();
+		if (!wp?.enabled || !wp.token) return fail(400, { error: 'The website connection is not set up (Admin → Website connection).' });
+		const wpEventId = Number((await request.formData()).get('wpEventId'));
+		if (!Number.isInteger(wpEventId) || wpEventId < 1) return fail(400, { error: 'Choose the website event.' });
+		try {
+			const [events, regs] = await Promise.all([wpEvents(wp), wpRegistrations(wp, wpEventId, event.classifications)]);
+			const sessions = listSessions(eventId).map((s) => ({ id: s.id, name: s.name, classifications: s.classifications }));
+			const preview = buildPreview(regs.rows, existingTeams(eventId), sessions, null);
+			return {
+				stage: 'preview' as const,
+				source: 'api' as const,
+				preview,
+				pluginLayout: false,
+				parseErrors: [] as string[],
+				filename: `Website: ${events.find((e) => e.id === wpEventId)?.name ?? `event ${wpEventId}`}`,
+				sha256: crypto.createHash('sha256').update(JSON.stringify(regs.raw)).digest('hex'),
+				cutoff: null
+			};
+		} catch (e) {
+			return fail(400, { error: e instanceof WpError ? e.message : 'Could not read registrations from the website.' });
+		}
+	},
+
 	apply: async ({ request, locals, params }) => {
 		const admin = requireAdmin(locals.auth);
 		const eventId = eventIdParam(params);
 		const event = getEvent(eventId);
 		const f = await request.formData();
 		let payload: {
+			source?: 'csv' | 'api';
 			filename: string;
 			sha256: string;
 			rows: {
@@ -122,7 +163,7 @@ export const actions = {
 						const dup = tx.select().from(schema.teams).where(and(eq(schema.teams.eventId, eventId), eq(schema.teams.registrationId, r.registrationId))).get();
 						if (dup) continue;
 					}
-					createTeam(tx, eventId, { ...fields, name: r.schoolName, classification: r.classification, sessionId: r.sessionId, registrationId: r.registrationId, source: 'csv' });
+					createTeam(tx, eventId, { ...fields, name: r.schoolName, classification: r.classification, sessionId: r.sessionId, registrationId: r.registrationId, source: payload.source === 'api' ? 'api' : 'csv' });
 					result.created++;
 				} else if (r.action === 'update' && r.existingTeamId) {
 					const t = tx.select().from(schema.teams).where(and(eq(schema.teams.id, r.existingTeamId), eq(schema.teams.eventId, eventId))).get();
@@ -140,7 +181,7 @@ export const actions = {
 				}
 			}
 		});
-		audit(`user:${admin.id}`, 'registrations_imported', { source: 'csv', filename: payload.filename, sha256: payload.sha256, ...result }, eventId);
+		audit(`user:${admin.id}`, 'registrations_imported', { source: payload.source === 'api' ? 'api' : 'csv', filename: payload.filename, sha256: payload.sha256, ...result }, eventId);
 		return { stage: 'done' as const, result };
 	}
 };

@@ -88,8 +88,19 @@ export function detectMapping(headers: string[]): { mapping: ColumnMapping; plug
 	return { mapping, pluginLayout: false };
 }
 
+/**
+ * Plugin 1.0.6 sends the WordPress admin page's HTML before the CSV rows.
+ * Start at the plugin's header row when the file doesn't begin with it.
+ */
+export function stripLeadingHtml(text: string): string {
+	const t = text.replace(/^﻿/, '');
+	if (!/^\s*</.test(t)) return t;
+	const m = /(^|\n)(ID,"?School Name"?,)/.exec(t);
+	return m ? t.slice(m.index + m[1].length) : t;
+}
+
 export function parseCsv(text: string): { headers: string[]; records: Record<string, string>[]; errors: string[] } {
-	const res = Papa.parse<Record<string, string>>(text.replace(/^﻿/, ''), {
+	const res = Papa.parse<Record<string, string>>(stripLeadingHtml(text), {
 		header: true,
 		skipEmptyLines: 'greedy',
 		transformHeader: (h) => h.trim()
@@ -100,6 +111,8 @@ export function parseCsv(text: string): { headers: string[]; records: Record<str
 
 export interface RegistrationRow {
 	rowNumber: number;
+	/** Registered while the website was in Stripe test mode (from the website API). */
+	isTest?: boolean;
 	registrationId: number | null;
 	schoolName: string;
 	classification: string;
@@ -126,7 +139,8 @@ const text = (s: string | undefined) => {
 /** Normalize a date like "2026-10-15 18:15:31" or "10/15/2026" to YYYY-MM-DD HH:MM:SS (or null). */
 export function normalizeDate(s: string | undefined): string | null {
 	const v = String(s ?? '').trim();
-	if (!v) return null;
+	// MySQL's zero date means "never set"; treat it as unknown so the year cutoff can't skip the row.
+	if (!v || v.startsWith('0000-00-00')) return null;
 	let m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(v);
 	if (m) return `${m[1]}-${m[2]}-${m[3]} ${m[4] ?? '00'}:${m[5] ?? '00'}:${m[6] ?? '00'}`;
 	m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/.exec(v);
@@ -263,6 +277,10 @@ export function buildPreview(rows: RegistrationRow[], existing: ExistingTeam[], 
 			p.action = p.changes.length ? 'update' : 'unchanged';
 			p.include = p.action === 'update';
 			return p;
+		}
+		if (r.isTest) {
+			p.include = false;
+			p.notes.push('Made while the website was in test mode');
 		}
 		const sameName = existingKeys.get(teamKey(r.schoolName));
 		if (sameName) {
