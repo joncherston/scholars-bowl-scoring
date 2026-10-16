@@ -62,7 +62,8 @@ export function validatePassword(pw: string): string | null {
 	return null;
 }
 
-const secureCookies = () => process.env.NODE_ENV === 'production';
+// COOKIE_SECURE=0 lets end-to-end tests run the production build over plain http.
+const secureCookies = () => (process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === '1' : process.env.NODE_ENV === 'production');
 
 function setCookie(cookies: Cookies, token: string, ttl: number) {
 	cookies.set(COOKIE, token, {

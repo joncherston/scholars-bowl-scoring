@@ -8,7 +8,7 @@
 	import { computeRound, other, type BonusPart, type EventBody, type Side } from '$lib/engine';
 	import { bonusShare, formatPoints, parsePoints } from '$lib/engine/points';
 	import type { ScorerMatch } from '$lib/scorer-types';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 
 	const store = new ScorerStore();
 	let ready = $state(false);
@@ -49,19 +49,31 @@
 	let sel = $state<{ side: Side; playerId: string | null } | null>(null);
 	let interrupt = $state(false);
 	let power = $state(false);
+	// A string, so a background sync that recomputes the round with the same step doesn't count as a change.
+	const stepKey = $derived(`${matchId}:${cur.tiebreaker ? 'T' : 'R'}${cur.number}:${phase}:${line?.answers.length ?? 0}`);
 	$effect(() => {
-		// Clear the selection whenever the tossup or phase changes.
-		void cur.number;
-		void phase;
+		// Clear the selection only when the scorer moves to a different step.
+		void stepKey;
 		sel = null;
 		interrupt = false;
 		power = false;
 	});
 	const canPick = (side: Side) => !pastMax && (phase === 'buzz' || (phase === 'second' && turnSide === side));
 
+	// Keys typed while an action is being saved are held and replayed in order once the
+	// screen reflects that action, so a fast scorer never has a keystroke land in the wrong step.
+	let saving = 0;
+	const heldKeys: KeyboardEvent[] = [];
 	async function add(body: EventBody) {
 		if (matchId === null || store.leaseLost) return;
-		await store.add(matchId, body);
+		saving++;
+		try {
+			await store.add(matchId, body);
+		} finally {
+			saving--;
+			await tick();
+			while (!saving && heldKeys.length) onKey(heldKeys.shift()!);
+		}
 	}
 	async function answer(correct: boolean) {
 		if (!sel) return;
@@ -245,7 +257,12 @@
 	// ---------- Keyboard ----------
 	function onKey(e: KeyboardEvent) {
 		const t = e.target as HTMLElement;
-		if (t.closest('input, select, textarea') || document.querySelector('dialog[open]') || !result || store.leaseLost) return;
+		if (t.closest?.('input, select, textarea') || document.querySelector('dialog[open]') || !result || store.leaseLost) return;
+		if (saving) {
+			if (!e.ctrlKey && !e.metaKey && !e.altKey) e.preventDefault();
+			heldKeys.push(e);
+			return;
+		}
 		// Fall back to the physical key for punctuation shortcuts.
 		const byCode: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=' };
 		const k = (e.key && e.key !== 'Unidentified' ? e.key : (byCode[e.code] ?? '')).toLowerCase();

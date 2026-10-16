@@ -1,5 +1,5 @@
 import { publish } from '$lib/server/bus';
-import { getDb, schema } from '$lib/server/db';
+import { getDb, getSqlite, schema } from '$lib/server/db';
 import { reportPending } from '$lib/server/presence';
 import { error, json } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
@@ -17,5 +17,10 @@ export async function POST({ locals, request }) {
 		db.update(schema.rooms).set({ lastHeardAt: new Date().toISOString() }).where(eq(schema.rooms.id, a.room.id)).run();
 		publish({ type: 'room', eventId: a.room.eventId, roomId: a.room.id });
 	}
-	return json({ leaseOk, serverTime: new Date().toISOString(), pending: Number(info?.pending) || 0 });
+	// Changes whenever anything in this room's rounds changes (including staff corrections and approvals).
+	const v = getSqlite()
+		.prepare('SELECT COUNT(*) AS n, MAX(e.server_ts) AS t FROM score_events e JOIN matches m ON m.id = e.match_id WHERE m.room_id = ?')
+		.get(a.room.id) as { n: number; t: string | null };
+	const pub = db.select({ id: schema.sessions.id }).from(schema.sessions).where(eq(schema.sessions.scheduleStatus, 'published')).all().length;
+	return json({ leaseOk, serverTime: new Date().toISOString(), version: `${v.n}:${v.t ?? ''}:${pub}` });
 }

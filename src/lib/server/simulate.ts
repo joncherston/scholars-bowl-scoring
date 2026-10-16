@@ -36,7 +36,9 @@ export function scriptGame(lineups: Record<Side, string[]>, rules: RuleSettings,
 			if (winner) {
 				out.push({ type: 'tossup_answer', tossup: n, side: winner, playerId: player(winner), correct: true });
 				const value = pick(rules.bonus.quickValues);
-				const parts = 1 + Math.floor(rand() * 3);
+				// Splits that divide evenly, like real packets (30 over 3 parts, 20 over 2 or 4).
+				const even = [1, 2, 3, 4].filter((n) => value % (n * 100) === 0);
+				const parts = pick(even.length ? even : [1]);
 				out.push({ type: 'bonus', tossup: n, side: winner, value, parts: Array.from({ length: parts }, () => (rand() < strength[winner!] + 0.2 ? 'correct' : 'incorrect')) });
 			}
 		}

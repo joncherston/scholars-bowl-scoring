@@ -11,11 +11,24 @@ const CACHE = `sb-scorer-${version}`;
 const ASSETS = new Set([...build, ...files]);
 const SHELL = '/scorer';
 
+/** Fetch and cache the scorer page itself, so a scorer who loaded it once can reload with no connection. */
+async function cacheShell(cache: Cache) {
+	try {
+		const res = await fetch(SHELL, { credentials: 'same-origin', cache: 'no-store' });
+		if (res.ok && !res.redirected) await cache.put(SHELL, res);
+	} catch {
+		/* offline during install; the next visit caches it */
+	}
+}
+
 sw.addEventListener('install', (event) => {
 	event.waitUntil(
 		caches
 			.open(CACHE)
-			.then((c) => c.addAll([...ASSETS]))
+			.then(async (c) => {
+				await c.addAll([...ASSETS]);
+				await cacheShell(c);
+			})
 			.then(() => sw.skipWaiting())
 	);
 });

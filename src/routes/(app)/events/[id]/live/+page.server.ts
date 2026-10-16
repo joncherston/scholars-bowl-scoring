@@ -50,7 +50,8 @@ export function load({ locals, params, url, depends }) {
 		scoreB: m.result.teams.B.roundScore,
 		tossup: m.result.currentTossup,
 		winner: m.result.winner,
-		flagCount: m.result.flags.length + m.gaps.length + (m.rejected ? 1 : 0)
+		// Fractional-bonus notes are informational; they don't need checking.
+		flagCount: m.result.flags.filter((f) => f.kind !== 'fractional_bonus' && f.kind !== 'inexact_bonus').length + m.gaps.length + (m.rejected ? 1 : 0)
 	}));
 	const toRows = (g: (typeof live.provisional.classifications)[number]) => ({
 		key: g.key,

@@ -149,8 +149,15 @@
 							<td class="no-print nowrap">
 								{#if a.active && isScoringBody(b) && !finalized}
 									<button class="btn small secondary" type="button" onclick={() => openCorrection(a.event.id, b)}>Correct…</button>
-									<form method="POST" action="?/void" use:enhance style="display: inline" onsubmit={(e) => { const r = prompt('Reason for voiding this entry?'); if (!r) { e.preventDefault(); return; } (e.currentTarget.querySelector('[name=reason]') as HTMLInputElement).value = r; }}>
-										<input type="hidden" name="target" value={a.event.id} /><input type="hidden" name="reason" />
+									{@const earned = b.type === 'tossup_answer' && b.correct && !b.tiebreaker ? result.tossups.find((t) => !t.tiebreaker && t.number === b.tossup)?.bonuses.find((x) => x.side === b.side) : undefined}
+									<form method="POST" action="?/void" use:enhance style="display: inline" onsubmit={(e) => {
+										const r = prompt('Reason for voiding this entry?');
+										if (!r) { e.preventDefault(); return; }
+										const f = e.currentTarget;
+										(f.querySelector('[name=reason]') as HTMLInputElement).value = r;
+										(f.querySelector('[name=alsoTarget]') as HTMLInputElement).value = earned && confirm(`Also void the bonus for tossup ${b.tossup}? It was earned by this answer.`) ? earned.eventId : '';
+									}}>
+										<input type="hidden" name="target" value={a.event.id} /><input type="hidden" name="reason" /><input type="hidden" name="alsoTarget" />
 										<button class="btn small ghost" type="submit">Void…</button>
 									</form>
 								{/if}

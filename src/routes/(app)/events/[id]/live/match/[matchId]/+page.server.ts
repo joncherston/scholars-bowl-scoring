@@ -111,7 +111,15 @@ export const actions = {
 		const reason = reasonOf(f);
 		if (!reason) return fail(400, { error: 'A reason is required for every correction.' });
 		const r = staffEvent(user, eventId, Number(params.matchId), { type: 'correction', action: 'void', target: String(f.get('target')), reason });
-		return r.status === 'accepted' ? { message: 'Entry voided.' } : fail(400, { error: `Not saved (${r.reason}).` });
+		if (r.status !== 'accepted') return fail(400, { error: `Not saved (${r.reason}).` });
+		// Voiding a correct answer can take the bonus it earned with it.
+		const also = String(f.get('alsoTarget') ?? '');
+		if (also) {
+			const r2 = staffEvent(user, eventId, Number(params.matchId), { type: 'correction', action: 'void', target: also, reason: `${reason} (bonus earned by the voided answer)` });
+			if (r2.status !== 'accepted') return fail(400, { error: `The answer was voided, but its bonus was not (${r2.reason}).` });
+			return { message: 'Entry and its bonus voided.' };
+		}
+		return { message: 'Entry voided.' };
 	},
 	amend: async ({ request, locals, params }) => {
 		const eventId = eventIdParam(params);

@@ -63,6 +63,7 @@ export class ScorerStore {
 	private db: IDBPDatabase | null = null;
 	private timers: ReturnType<typeof setInterval>[] = [];
 	private syncQueued = false;
+	private serverVersion: string | null = null;
 	private roomId = 0;
 
 	async init() {
@@ -242,6 +243,9 @@ export class ScorerStore {
 			const j = await res.json();
 			this.online = true;
 			if (this.state) this.state.leaseOk = !!j.leaseOk;
+			// Something changed on the server (a staff correction, approval, or new schedule): reload.
+			if (j.version && this.serverVersion !== null && j.version !== this.serverVersion && !this.syncing) await this.refresh();
+			this.serverVersion = j.version ?? null;
 		} catch {
 			this.online = false;
 		}
