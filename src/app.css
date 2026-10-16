@@ -119,6 +119,9 @@ p {
 .card + .card {
 	margin-top: 16px;
 }
+.grid > .card + .card {
+	margin-top: 0;
+}
 
 .stack > * + * {
 	margin-top: 12px;
