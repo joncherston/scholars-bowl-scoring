@@ -1,0 +1,47 @@
+{
+  "name": "scholars-bowl-scoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node build/index.js",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "2.2.2",
+    "better-sqlite3": "12.11.1",
+    "drizzle-orm": "0.45.4",
+    "exceljs": "4.4.0",
+    "papaparse": "5.7.0",
+    "playwright-core": "1.64.1"
+  },
+  "devDependencies": {
+    "@fontsource/libre-franklin": "5.3.0",
+    "@fontsource/mulish": "5.3.0",
+    "@playwright/test": "1.64.1",
+    "@sveltejs/adapter-node": "5.5.7",
+    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/vite-plugin-svelte": "6.2.4",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.19.2",
+    "@types/papaparse": "5.5.2",
+    "drizzle-kit": "0.31.11",
+    "fast-check": "4.10.2",
+    "idb": "8.0.4",
+    "svelte": "5.57.2",
+    "svelte-check": "4.7.6",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "4.1.12"
+  }
+}

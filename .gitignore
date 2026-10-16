@@ -1,0 +1,17 @@
+node_modules/
+/build/
+/.svelte-kit/
+/package/
+/data/
+/test-results/
+/playwright-report/
+.env
+.env.*
+!.env.example
+.deploy.env
+.DS_Store
+*.log
+# Local-only planning docs and real registration data (repo is public)
+BUILD_PROMPT.md
+PLAN.md
+/local-data/
