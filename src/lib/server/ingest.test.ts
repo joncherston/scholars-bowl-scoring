@@ -88,6 +88,15 @@ describe('ingestEvents', () => {
 		expect(res.map((r) => r.reason)).toEqual(['invalid_id', 'wrong_room', 'invalid_event', 'unknown_target']);
 	});
 
+	it('does not let a room undo a staff entry', () => {
+		const start = ev({ type: 'round_started', lineups: { A: [], B: [] } }, 1);
+		ingestEvents(roomCtx, [start]);
+		const staff: IngestContext = { ...roomCtx, roomId: null, deviceId: null, actor: 'user:1', actorName: 'Head', source: 'staff', allowed: STAFF_TYPES, enforceLease: false, lockSubmitted: false };
+		const note = ev({ type: 'note', text: 'checked' });
+		ingestEvents(staff, [note]);
+		expect(ingestEvents(roomCtx, [ev({ type: 'undo', target: note.id }, 2)])[0].reason).toBe('not_allowed');
+	});
+
 	it('detects gaps in a device sequence', () => {
 		ingestEvents(roomCtx, [ev({ type: 'round_started', lineups: { A: [], B: [] } }, 1), ev({ type: 'tossup_dead', tossup: 1 }, 4)]);
 		expect(deviceGaps(match.id)).toEqual([{ deviceId: 'dev-1', missing: [2, 3] }]);

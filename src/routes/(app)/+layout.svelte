@@ -24,6 +24,7 @@
 				<a href="/scorer">{auth.roomName} scorer</a>
 				<form method="POST" action="/logout"><button class="linklike" type="submit">Sign out</button></form>
 			{:else}
+				<a href="/results">Results</a>
 				<a href="/login">Staff sign in</a>
 				<a href="/room">Room scorer</a>
 			{/if}

@@ -195,8 +195,14 @@ export function ingestEvents(ctx: IngestContext, incoming: IncomingEvent[]): Ing
 			const log = matchEvents(match.id);
 			if (e.body.type === 'undo' || (e.body.type === 'correction' && e.body.action !== 'add')) {
 				const target = (e.body as { target: string }).target;
-				if (!log.some((x) => x.id === target)) {
+				const t = log.find((x) => x.id === target);
+				if (!t) {
 					reject(e, 'unknown_target');
+					continue;
+				}
+				// A room may only undo its own actions, never a staff correction.
+				if (ctx.roomId && !t.actor.startsWith('room:')) {
+					reject(e, 'not_allowed');
 					continue;
 				}
 			}
