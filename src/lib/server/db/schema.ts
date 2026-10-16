@@ -148,6 +148,8 @@ export const teams = sqliteTable(
 		sessionId: integer('session_id').references(() => sessions.id),
 		/** Plugin registration ID, for idempotent re-imports. */
 		registrationId: integer('registration_id'),
+		/** Team name exactly as registered; `name` may be edited for display. */
+		registrationName: text('registration_name'),
 		source: text('source', { enum: ['csv', 'api', 'manual'] }).notNull().default('manual'),
 		registrationStatus: text('registration_status'),
 		contactName: text('contact_name'),

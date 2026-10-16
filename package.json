@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "dev:local": "DATA_DIR=data/dev DISABLE_BACKUPS=1 SETUP_TOKEN=local-dev-setup-code vite dev --port 5173 --strictPort"
   },
   "engines": {
     "node": ">=22"
