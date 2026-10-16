@@ -20,3 +20,14 @@ db.pragma('busy_timeout = 10000');
 await db.backup(file);
 db.close();
 console.log(`Backup written: ${file}`);
+
+// Keep the newest copies of each kind this script makes.
+const keep = { 'pre-deploy': 20, offsite: 10, manual: 20 };
+if (keep[kind]) {
+	const mine = fs
+		.readdirSync(dir)
+		.filter((f) => f.startsWith(`scoring-${kind}-`) && f.endsWith('.db'))
+		.sort()
+		.reverse();
+	for (const old of mine.slice(keep[kind])) fs.rmSync(path.join(dir, old), { force: true });
+}

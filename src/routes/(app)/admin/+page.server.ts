@@ -4,7 +4,7 @@ import { backupNow, listBackups } from '$lib/server/backup';
 import { getDb, schema } from '$lib/server/db';
 import { requireAdmin } from '$lib/server/guard';
 import { fail } from '@sveltejs/kit';
-import { asc, eq } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 
 export function load({ locals, url }) {
 	requireAdmin(locals.auth, url);
@@ -13,7 +13,8 @@ export function load({ locals, url }) {
 		.from(schema.users)
 		.orderBy(asc(schema.users.name))
 		.all();
-	return { users, backups: listBackups().slice(0, 30) };
+	const events = getDb().select({ id: schema.events.id, name: schema.events.name, isTest: schema.events.isTest }).from(schema.events).orderBy(desc(schema.events.eventDate)).all();
+	return { users, events, backups: listBackups().slice(0, 30) };
 }
 
 export const actions = {

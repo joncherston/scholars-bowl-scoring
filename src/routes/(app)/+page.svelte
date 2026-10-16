@@ -22,6 +22,7 @@
 			<p>Administrators, head scorekeepers, check-in staff, and bracket builders.</p>
 		</a>
 	</div>
+	<p class="muted" style="margin-top: 20px"><a href="/guide">Day-of Guide for volunteers</a> · <a href="/check">Check a room computer</a></p>
 </div>
 
 <style>

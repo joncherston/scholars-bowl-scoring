@@ -364,6 +364,7 @@
 						<button type="button" role="menuitem" onclick={() => { store.downloadRescueFile(); menuOpen = false; }}>Download results file (for a flash drive)</button>
 						{#if store.state}<a role="menuitem" href="/projector/{store.state.room.projectorToken}" target="_blank" rel="noopener">Open projector view</a>{/if}
 						<button type="button" role="menuitem" onclick={() => { helpOpen = true; menuOpen = false; }}>Keyboard shortcuts</button>
+						<a role="menuitem" href="/guide" target="_blank" rel="noopener">Day-of Guide</a>
 						<button type="button" role="menuitem" onclick={signOut}>Sign out</button>
 					</div>
 				{/if}

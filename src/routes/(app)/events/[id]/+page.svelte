@@ -35,6 +35,8 @@
 		{/if}
 	</div>
 
+	<p class="small" style="margin-top: 16px"><a href="/guide" target="_blank" rel="noopener">Day-of Guide</a> (print one for each room) · <a href="/check" target="_blank" rel="noopener">Room computer check</a></p>
+
 	<h2 style="margin-top: 24px">Sessions</h2>
 	{#if data.unassignedTeams}
 		<div class="alert warning">{data.unassignedTeams} team(s) are not assigned to a session. <a href="{base}/teams">Fix on the Teams page</a>.</div>

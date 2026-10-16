@@ -20,7 +20,13 @@
 				<a class="btn" href="/admin/backups/latest">Download full backup</a>
 			</div>
 		</div>
-		<p class="muted small">Automatic snapshots every 5 minutes on event days and nightly otherwise. A backup is also taken before every deploy and every import.</p>
+		<p class="muted small">Automatic snapshots every 5 minutes on event days and nightly otherwise. A backup is also taken before every deploy and every import. For a spreadsheet of everything, use an event's Reports → Excel workbook.</p>
+		{#if data.events.length}
+			<div class="row" style="margin: 8px 0 14px">
+				<strong>Export everything to Excel now:</strong>
+				{#each data.events as e (e.id)}<a class="btn small secondary" href="/events/{e.id}/reports/export.xlsx">{e.name}{e.isTest ? ' (test)' : ''}</a>{/each}
+			</div>
+		{/if}
 		{#if data.backups.length}
 			<table class="data">
 				<thead><tr><th>File</th><th>When</th><th class="num">Size</th><th></th></tr></thead>

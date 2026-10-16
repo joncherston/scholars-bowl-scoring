@@ -3,7 +3,7 @@ import path from 'node:path';
 import { dataDir, getDb, getSqlite, schema } from './db';
 
 export const TZ = 'America/Chicago';
-export type BackupKind = 'event-day' | 'nightly' | 'manual' | 'pre-deploy' | 'pre-import' | 'pre-migration';
+export type BackupKind = 'event-day' | 'nightly' | 'manual' | 'pre-deploy' | 'pre-import' | 'pre-migration' | 'offsite';
 
 export const backupDir = () => path.resolve(process.env.BACKUP_DIR ?? path.join(dataDir(), 'backups'));
 
@@ -34,7 +34,7 @@ export function listBackups() {
 
 /** Keep every event-day snapshot; keep the newest 14 nightlies and 20 of each other kind. */
 function prune() {
-	const keep: Partial<Record<BackupKind, number>> = { nightly: 14, manual: 20, 'pre-deploy': 20, 'pre-import': 20, 'pre-migration': 20 };
+	const keep: Partial<Record<BackupKind, number>> = { nightly: 14, manual: 20, 'pre-deploy': 20, 'pre-import': 20, 'pre-migration': 20, offsite: 10 };
 	const all = listBackups();
 	for (const [kind, n] of Object.entries(keep)) {
 		const ofKind = all.filter((b) => b.file.startsWith(`scoring-${kind}-`));
