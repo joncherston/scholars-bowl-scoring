@@ -12,8 +12,13 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data \
-    MIGRATIONS_DIR=/app/drizzle
+    MIGRATIONS_DIR=/app/drizzle \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 COPY --from=build /app/node_modules ./node_modules
+# Headless Chromium (plus its system libraries) for rendering report PDFs.
+RUN node node_modules/playwright-core/cli.js install --with-deps --only-shell chromium \
+    && rm -rf /var/lib/apt/lists/* \
+    && chmod -R o+rx /ms-playwright
 COPY --from=build /app/build ./build
 COPY --from=build /app/package.json ./package.json
 COPY drizzle ./drizzle
