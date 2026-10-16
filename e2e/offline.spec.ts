@@ -30,6 +30,9 @@ test.describe('offline scoring', () => {
 		// The page must be able to reload offline, so the service worker has to be in control.
 		await page.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 15000 });
 
+		// Offline emulation can lapse for a moment while a page reloads, so also block the API outright.
+		const blockApi = (r: import('@playwright/test').Route) => r.abort('internetdisconnected');
+		await ctx.route('**/api/**', blockApi);
 		await ctx.setOffline(true);
 		await correctWithBonus(page, '7', ['1', '2']);
 		await page.keyboard.press('d');
@@ -56,6 +59,7 @@ test.describe('offline scoring', () => {
 		expect(storedEvents(g.match.id)).toHaveLength(3);
 
 		// Back online: the queued actions go up in order, once each.
+		await ctx.unroute('**/api/**', blockApi);
 		await ctx.setOffline(false);
 		await expect(page.getByText('All changes saved')).toBeVisible({ timeout: 20000 });
 		const evs = storedEvents(g.match.id);
@@ -76,6 +80,7 @@ test.describe('offline scoring', () => {
 		await roomLogin(p1, g.pin);
 		await p1.getByRole('button', { name: 'Start round' }).click();
 		await waitFor(() => storedEvents(g.match.id).length === 1);
+		await c1.route('**/api/**', (r) => r.abort('internetdisconnected'));
 		await c1.setOffline(true);
 		await correctWithBonus(p1, '1', ['1', '2']);
 		await correctWithBonus(p1, '7', ['1']);
