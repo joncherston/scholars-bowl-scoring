@@ -15,7 +15,8 @@ export function load({ locals, params, url }) {
 	const teams = listTeams(id)
 		.filter((t) => t.sessionId === sessionId && !t.withdrawn)
 		.map((t) => ({ ...t, roster: teamRoster(t.id) }));
-	return { sessionId, teams, maxPlayers: currentRuleVersion(id).settings.roster.maxPlayers };
+	const teamParam = Number(url.searchParams.get('team')) || null;
+	return { sessionId, teams, teamParam, maxPlayers: currentRuleVersion(id).settings.roster.maxPlayers };
 }
 
 function teamIn(eventId: number, teamId: number) {

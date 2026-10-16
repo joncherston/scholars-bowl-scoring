@@ -3,7 +3,9 @@
 
 	let { data, form } = $props();
 	let q = $state('');
-	let selectedId = $state<number | null>(null);
+	// Opened from the Teams tab with ?team=ID: start on that team.
+	// svelte-ignore state_referenced_locally
+	let selectedId = $state<number | null>(data.teamParam);
 	let editing = $state<string | null>(null);
 
 	const base = $derived(`/events/${data.event.id}/checkin`);

@@ -3,7 +3,7 @@ import { getDb, schema } from '$lib/server/db';
 import { eventIdParam, getEvent, listSessions, normalizeClassification } from '$lib/server/events';
 import { requireEventRole } from '$lib/server/guard';
 import { cleanName } from '$lib/server/registrations';
-import { createTeam, listTeams } from '$lib/server/teams';
+import { createTeam, listTeams, playerDisplayName, teamRoster } from '$lib/server/teams';
 import { fail } from '@sveltejs/kit';
 import { and, count, eq, or } from 'drizzle-orm';
 
@@ -14,6 +14,7 @@ export function load({ locals, params, url }) {
 	const teams = listTeams(id).map((t) => ({
 		...t,
 		players: db.select({ n: count() }).from(schema.rosterEntries).where(and(eq(schema.rosterEntries.teamId, t.id), eq(schema.rosterEntries.removed, false))).get()!.n,
+		playerNames: teamRoster(t.id).map(playerDisplayName),
 		games: db.select({ n: count() }).from(schema.matches).where(or(eq(schema.matches.teamAId, t.id), eq(schema.matches.teamBId, t.id))).get()!.n
 	}));
 	return { teams, sessionList: listSessions(id) };

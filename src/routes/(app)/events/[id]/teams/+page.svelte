@@ -76,7 +76,7 @@
 			<div class="table-wrap">
 				<table class="data">
 					<thead>
-						<tr><th>Team</th><th>Class</th><th>Contact</th><th class="num">Registered students</th><th class="num">Players entered</th><th>Status</th><th></th></tr>
+						<tr><th>Team</th><th>Class</th><th>Contact</th><th class="num">Registered students</th><th>Players</th><th>Status</th><th></th></tr>
 					</thead>
 					<tbody>
 						{#each g.teams as t (t.id)}
@@ -123,7 +123,11 @@
 									<td>{t.classification}</td>
 									<td class="small">{t.contactName ?? ''}{#if t.contactEmail}<div class="muted">{t.contactEmail}</div>{/if}</td>
 									<td class="num">{t.competingStudents ?? '—'}</td>
-									<td class="num">{t.players}</td>
+									<td class="players">
+										<span class="num">{t.players}</span>
+										{#if t.playerNames.length}<div class="small names">{t.playerNames.join(', ')}</div>{/if}
+										<a class="small" href="/events/{data.event.id}/checkin?session={t.sessionId ?? ''}&team={t.id}">{t.players ? 'Edit players' : 'Add players'}</a>
+									</td>
 									<td>
 										{#if t.withdrawn}<span class="badge bad">Withdrawn</span>
 										{:else if t.arrivedAt}<span class="badge ok">Checked in</span>
@@ -146,6 +150,12 @@
 <style>
 	tr.withdrawn td {
 		color: var(--muted);
+	}
+	td.players {
+		max-width: 320px;
+	}
+	.names {
+		color: var(--text);
 	}
 	tr.withdrawn strong {
 		text-decoration: line-through;
