@@ -22,9 +22,12 @@ Stack: SvelteKit 2 + TypeScript (adapter-node), SQLite in WAL mode (better-sqlit
 ```bash
 npm install
 npm run dev:local        # http://localhost:5173, data in data/dev, setup code from dev.env.example
-npm test                 # engine, import, schedule, ingest, and simulation tests
+npm test                 # unit tests: engine, import, schedule, ingest, simulation
 npm run check            # type check
+npm run test:e2e         # browser tests against a production build on a throwaway database
 ```
+
+The end-to-end tests (`e2e/`) need Playwright's Chromium once: `npx playwright install --only-shell chromium`. They cover the room scorer (keyboard scoring, bonuses, undo, the tossup-12 prompt, tiebreakers, submit and lock), offline scoring (reloading with no connection, the rescue file, recovering a lost computer's actions), registration import and re-import, check-in limits, approvals and corrections, tie decisions, finalizing and PDFs, device takeover, returning a round to the room, and access control.
 
 Create the first admin at `http://localhost:5173/setup` with the values in `dev.env.example`. From an event's "Start a new event" page you can create a **practice event** filled with fictional schools and students, and on its Live tab, **auto-play** a session to exercise the dashboard and reports.
 
@@ -41,7 +44,7 @@ REAL_CSV=/path/to/export.csv npx vitest run registrations.real
 The server runs the app with Docker Compose behind a host Caddy that terminates HTTPS. Nothing about the server is committed here; your machine needs a `.deploy.env` (copy `deploy/deploy.env.example`).
 
 ```bash
-./deploy/deploy.sh            # tests, type check, build, push to GitHub, push to the server, build there, back up the DB, restart
+./deploy/deploy.sh            # unit + end-to-end tests, type check, build, push to GitHub, push to the server, build there, back up the DB, restart
 ./deploy/deploy.sh rollback   # switch back to the previous image (database unchanged)
 ```
 

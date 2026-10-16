@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One-command deploy from a developer machine.
-#   ./deploy/deploy.sh            test, build, push, and deploy the current commit
+#   ./deploy/deploy.sh            unit + end-to-end tests, build, push, and deploy the current commit
+#   SKIP_E2E=1 ./deploy/deploy.sh skip the browser tests (emergency fixes only)
 #   ./deploy/deploy.sh rollback   switch the server back to the previous version
 # Server details come from .deploy.env (not committed); see deploy/deploy.env.example.
 set -euo pipefail
@@ -27,8 +28,13 @@ echo "==> Tests"
 npm test --silent
 echo "==> Type check"
 npm run check --silent
-echo "==> Build"
-npm run build --silent >/dev/null
+if [ "${SKIP_E2E:-}" = "1" ]; then
+	echo "==> Build (end-to-end tests skipped)"
+	npm run build --silent >/dev/null
+else
+	echo "==> End-to-end tests (builds the app)"
+	npx playwright test --reporter=line
+fi
 
 echo "==> Push to GitHub"
 git push -q origin HEAD:main

@@ -15,3 +15,7 @@ node_modules/
 BUILD_PROMPT.md
 PLAN.md
 /local-data/
+
+# End-to-end test data
+/.e2e-data/
+/e2e/.auth/
