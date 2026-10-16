@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { localDate } from './backup';
 import { getDb, schema } from './db';
 import { createEvent, DEFAULT_CLASSIFICATIONS, defaultSessions, listSessions } from './events';
+import { generateDraft, savePools } from './schedule';
 import { addPlayerToTeam, createTeam } from './teams';
 
 /** Fictional schools for practice events. Any resemblance to real schools is coincidental. */
@@ -87,5 +88,12 @@ export function createPracticeEvent(actorName: string, opts: { date?: string; ro
 			}
 		}
 	});
+	// Merge the small morning classifications into one pool, then build and publish schedules.
+	for (const s of sessions) {
+		if (s.classifications.includes('1A')) savePools(s.id, { Private: 'Private', '1A': '1A–3A', '2A': '1A–3A', '3A': '1A–3A' });
+		else savePools(s.id, Object.fromEntries(s.classifications.map((c) => [c, '4A–7A'])));
+		generateDraft(id, s.id, { rounds: 6, onlyArrived: false, fillByesWithNonCounters: true });
+		db.update(schema.sessions).set({ scheduleStatus: 'published', schedulePublishedAt: new Date().toISOString() }).where(eq(schema.sessions.id, s.id)).run();
+	}
 	return id;
 }
