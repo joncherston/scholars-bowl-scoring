@@ -1,0 +1,404 @@
+/* SUSCC Scholars' Bowl Scoring — design tokens and base styles.
+   Colors from suscc.edu. Gold is only used on navy (gold on white fails contrast). */
+:root {
+	--suscc-blue: #24408f;
+	--suscc-blue-dark: #1b3170;
+	--suscc-navy: #122047;
+	--suscc-gold: #fad347;
+	--suscc-gold-dark: #ecc127;
+
+	--bg: #f3f5f9;
+	--surface: #ffffff;
+	--surface-2: #f8f9fc;
+	--text: #1b2233;
+	--muted: #535c6e;
+	--border: #d3d8e3;
+	--border-strong: #aab2c3;
+	--focus: #1a5fff;
+
+	--primary: var(--suscc-blue);
+	--primary-hover: var(--suscc-blue-dark);
+	--danger: #b42318;
+	--danger-bg: #fdecea;
+	--success: #157a35;
+	--success-bg: #e7f6ec;
+	--warning: #8a5a00;
+	--warning-bg: #fff6dd;
+	--info-bg: #e9effc;
+
+	--team-a: #24408f;
+	--team-b: #8a1c2b;
+
+	--radius: 8px;
+	--radius-sm: 5px;
+	--shadow: 0 1px 2px rgb(18 32 71 / 8%), 0 2px 8px rgb(18 32 71 / 6%);
+
+	--font-body: 'Mulish', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-head: 'Libre Franklin', 'Mulish', system-ui, sans-serif;
+	--font-num: 'Libre Franklin', system-ui, sans-serif;
+
+	color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font-body);
+	font-size: 16px;
+	line-height: 1.5;
+}
+
+h1,
+h2,
+h3,
+h4 {
+	font-family: var(--font-head);
+	line-height: 1.2;
+	margin: 0 0 0.5em;
+	color: var(--suscc-navy);
+}
+h1 {
+	font-size: 1.75rem;
+	font-weight: 800;
+}
+h2 {
+	font-size: 1.3rem;
+	font-weight: 700;
+}
+h3 {
+	font-size: 1.1rem;
+	font-weight: 700;
+}
+
+a {
+	color: var(--primary);
+}
+a:hover {
+	color: var(--primary-hover);
+}
+
+:focus-visible {
+	outline: 3px solid var(--focus);
+	outline-offset: 2px;
+}
+
+p {
+	margin: 0 0 0.75em;
+}
+
+.container {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 24px 16px 48px;
+}
+.container.narrow {
+	max-width: 520px;
+}
+.container.wide {
+	max-width: 1600px;
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow);
+	padding: 20px;
+}
+.card + .card {
+	margin-top: 16px;
+}
+
+.stack > * + * {
+	margin-top: 12px;
+}
+.row {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.row.between {
+	justify-content: space-between;
+}
+.grid {
+	display: grid;
+	gap: 16px;
+}
+.grid.cols-2 {
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.grid.cols-3 {
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.muted {
+	color: var(--muted);
+}
+.small {
+	font-size: 0.875rem;
+}
+.nowrap {
+	white-space: nowrap;
+}
+.num {
+	font-family: var(--font-num);
+	font-variant-numeric: tabular-nums;
+}
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Buttons */
+.btn,
+button.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: 40px;
+	padding: 8px 16px;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--primary);
+	background: var(--primary);
+	color: #fff;
+	font: 600 0.95rem var(--font-body);
+	text-decoration: none;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.btn:hover {
+	background: var(--primary-hover);
+	color: #fff;
+}
+.btn.secondary {
+	background: var(--surface);
+	color: var(--primary);
+	border-color: var(--border-strong);
+}
+.btn.secondary:hover {
+	background: var(--info-bg);
+	color: var(--primary-hover);
+}
+.btn.danger {
+	background: var(--danger);
+	border-color: var(--danger);
+}
+.btn.ghost {
+	background: transparent;
+	border-color: transparent;
+	color: var(--primary);
+}
+.btn.ghost:hover {
+	background: var(--info-bg);
+}
+.btn.small {
+	min-height: 32px;
+	padding: 4px 10px;
+	font-size: 0.85rem;
+}
+.btn.large {
+	min-height: 52px;
+	padding: 12px 24px;
+	font-size: 1.1rem;
+}
+.btn:disabled,
+.btn[aria-disabled='true'] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* Forms */
+label {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+.field {
+	margin-bottom: 14px;
+}
+.field .hint {
+	font-weight: 400;
+	font-size: 0.85rem;
+	color: var(--muted);
+}
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='number'],
+input[type='date'],
+input[type='time'],
+input[type='search'],
+input[type='tel'],
+input[type='url'],
+select,
+textarea {
+	width: 100%;
+	min-height: 40px;
+	padding: 8px 10px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: #fff;
+	color: var(--text);
+	font: 1rem var(--font-body);
+}
+input:focus,
+select:focus,
+textarea:focus {
+	border-color: var(--primary);
+}
+input[type='checkbox'],
+input[type='radio'] {
+	width: 18px;
+	height: 18px;
+	accent-color: var(--primary);
+	vertical-align: middle;
+}
+.check {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	font-weight: 400;
+}
+
+/* Alerts and badges */
+.alert {
+	padding: 12px 14px;
+	border-radius: var(--radius-sm);
+	border: 1px solid;
+	margin-bottom: 16px;
+}
+.alert.error {
+	background: var(--danger-bg);
+	border-color: #f3b4ad;
+	color: #7a1610;
+}
+.alert.success {
+	background: var(--success-bg);
+	border-color: #a6dbb7;
+	color: #0f5124;
+}
+.alert.warning {
+	background: var(--warning-bg);
+	border-color: #f0d38a;
+	color: #5c3c00;
+}
+.alert.info {
+	background: var(--info-bg);
+	border-color: #bccbf0;
+	color: var(--suscc-navy);
+}
+.badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 0.78rem;
+	font-weight: 700;
+	border: 1px solid var(--border);
+	background: var(--surface-2);
+	color: var(--muted);
+	white-space: nowrap;
+}
+.badge.test {
+	background: #fff1c2;
+	border-color: #e2bb3b;
+	color: #5c3c00;
+}
+.badge.ok {
+	background: var(--success-bg);
+	border-color: #a6dbb7;
+	color: var(--success);
+}
+.badge.warn {
+	background: var(--warning-bg);
+	border-color: #f0d38a;
+	color: var(--warning);
+}
+.badge.bad {
+	background: var(--danger-bg);
+	border-color: #f3b4ad;
+	color: var(--danger);
+}
+.badge.info {
+	background: var(--info-bg);
+	border-color: #bccbf0;
+	color: var(--suscc-blue);
+}
+
+/* Tables */
+table.data {
+	width: 100%;
+	border-collapse: collapse;
+	background: var(--surface);
+}
+table.data th,
+table.data td {
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--border);
+	text-align: left;
+	vertical-align: middle;
+}
+table.data th {
+	font-family: var(--font-head);
+	font-size: 0.85rem;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: var(--muted);
+	background: var(--surface-2);
+}
+table.data td.num,
+table.data th.num {
+	text-align: right;
+}
+table.data tr.voided td {
+	text-decoration: line-through;
+	color: var(--muted);
+}
+.table-wrap {
+	overflow-x: auto;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+}
+
+/* Practice/test banner shown on every page of a test event */
+.test-banner {
+	background: repeating-linear-gradient(45deg, #fad347, #fad347 14px, #f5c518 14px, #f5c518 28px);
+	color: #1b2233;
+	font-weight: 800;
+	text-align: center;
+	padding: 4px 8px;
+	font-family: var(--font-head);
+	letter-spacing: 0.04em;
+}
+
+@media print {
+	body {
+		background: #fff;
+	}
+	.no-print {
+		display: none !important;
+	}
+	.card {
+		box-shadow: none;
+	}
+}

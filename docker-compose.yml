@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    image: scholars-bowl-scoring:${APP_TAG:-latest}
+    container_name: scholars-bowl-scoring
+    restart: unless-stopped
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATA_DIR: /data
+      ADDRESS_HEADER: X-Forwarded-For
+      XFF_DEPTH: "1"
+      BODY_SIZE_LIMIT: 25M
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:3300:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"

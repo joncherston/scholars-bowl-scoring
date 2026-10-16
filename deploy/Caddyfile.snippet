@@ -1,0 +1,10 @@
+# SUSCC Scholars' Bowl Scoring — ~/apps/scholars-bowl-scoring (app container on 127.0.0.1:3300)
+scoring.suscholarsbowl.com {
+	@notsse not header Accept text/event-stream
+	encode @notsse zstd gzip
+	header -Server
+	header X-Robots-Tag "noindex, nofollow"
+	reverse_proxy 127.0.0.1:3300 {
+		flush_interval -1
+	}
+}
