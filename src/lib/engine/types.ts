@@ -58,6 +58,8 @@ export interface ScoreEvent {
 	actor: string;
 	actorName?: string;
 	deviceId?: string | null;
+	/** Per-round counter on the sending device, for gap detection. */
+	deviceSeq?: number | null;
 	clientTs?: string;
 	serverTs?: string;
 }

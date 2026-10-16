@@ -22,3 +22,22 @@ export function rateLimit(key: string, limit: number, windowMs: number): { ok: b
 export function resetRateLimit(key: string) {
 	buckets.delete(key);
 }
+
+const failures = new Map<string, number[]>();
+
+/** True when `key` has `limit` or more recorded failures within the window. Does not record anything. */
+export function tooManyFailures(key: string, limit: number, windowMs: number): boolean {
+	const now = Date.now();
+	const hits = (failures.get(key) ?? []).filter((t) => now - t < windowMs);
+	failures.set(key, hits);
+	return hits.length >= limit;
+}
+
+export function noteFailure(...keys: string[]) {
+	const now = Date.now();
+	for (const k of keys) failures.set(k, [...(failures.get(k) ?? []).filter((t) => now - t < 3600_000), now]);
+}
+
+export function clearFailures(key: string) {
+	failures.delete(key);
+}
