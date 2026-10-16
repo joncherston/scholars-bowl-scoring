@@ -8,6 +8,7 @@ import { matchEvents, rulesForMatch } from '$lib/server/ingest';
 import { computeLive, roomHealth } from '$lib/server/live';
 import { roomPending } from '$lib/server/presence';
 import { sessionRooms } from '$lib/server/schedule';
+import { simulationStatus, startSimulation, stopSimulation } from '$lib/server/simulate';
 import { staffEvent } from '$lib/server/staff-actions';
 import { fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
@@ -22,7 +23,8 @@ export function load({ locals, params, url, depends }) {
 	const live = computeLive(eventId, { sessionIds: [sessionId] });
 	const session = live.sessions[0];
 	const teamName = (id: string | number) => live.teams.find((t) => t.id === String(id))?.name ?? '?';
-	const rooms = sessionRooms(sessionId).map((r) => {
+	const usedRooms = new Set(live.matches.map((m) => m.roomId));
+	const rooms = sessionRooms(sessionId).filter((r) => usedRooms.has(r.id) || usedRooms.size === 0).map((r) => {
 		const row = live.rooms.find((x) => x.id === r.id)!;
 		const ms = live.matches.filter((m) => m.roomId === r.id).sort((a, b) => a.roundNo - b.roundNo);
 		const current = ms.find((m) => m.result.status === 'in_progress' || m.result.status === 'ended') ?? ms.find((m) => m.result.status === 'submitted') ?? ms.find((m) => m.result.status === 'not_started');
@@ -95,6 +97,7 @@ export function load({ locals, params, url, depends }) {
 		teamPlaces: live.rules.awards.teamPlaces,
 		pendingCounting: live.provisional.pendingMatchIds.length,
 		unapprovedCounting: live.matches.filter((m) => m.counts && m.result.status !== 'approved').length,
+		simulation: simulationStatus(sessionId),
 		teamNames: Object.fromEntries(live.teams.map((t) => [t.id, t.name])),
 		playerNames: live.playerNames
 	};
@@ -141,6 +144,30 @@ export const actions = {
 		audit(`user:${admin.id}`, 'session_reopened', { sessionId, reason }, eventId);
 		publish({ type: 'session', eventId, sessionId });
 		return { message: 'Session reopened.' };
+	},
+
+	simulate: async ({ request, locals, params }) => {
+		const eventId = eventIdParam(params);
+		const admin = requireAdmin(locals.auth);
+		const f = await request.formData();
+		const sessionId = Number(f.get('sessionId'));
+		const stepMs = Math.max(0, Math.min(2000, Number(f.get('stepMs')) || 0));
+		try {
+			startSimulation(eventId, sessionId, { stepMs, approve: f.get('approve') === 'on', startedBy: admin.name, approverId: admin.id });
+		} catch (e) {
+			return fail(400, { error: e instanceof Error ? e.message : 'Could not start the simulation.' });
+		}
+		audit(`user:${admin.id}`, 'simulation_started', { sessionId, stepMs }, eventId);
+		return { message: 'Simulation started. Watch the rooms and standings fill in.' };
+	},
+
+	stopSimulation: async ({ request, locals, params }) => {
+		const eventId = eventIdParam(params);
+		const admin = requireAdmin(locals.auth);
+		const sessionId = Number((await request.formData()).get('sessionId'));
+		stopSimulation(sessionId);
+		audit(`user:${admin.id}`, 'simulation_stopped', { sessionId }, eventId);
+		return { message: 'Simulation stopped.' };
 	},
 
 	resolveTie: async ({ request, locals, params }) => {

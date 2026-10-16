@@ -106,6 +106,31 @@
 	{#if !data.session}
 		<div class="card" style="margin-top: 16px">No sessions yet.</div>
 	{:else}
+		{#if data.event.isTest && data.can.admin}
+			<div class="card sim">
+				<div class="row between">
+					<div>
+						<strong>Simulation</strong> <span class="muted small">(practice events only)</span>
+						{#if data.simulation?.running}<span class="badge info">Running · round {data.simulation.round} of {data.simulation.rounds} · {data.simulation.done}/{data.simulation.total} games</span>
+						{:else if data.simulation}<span class="badge">{data.simulation.error ? `Stopped: ${data.simulation.error}` : `Finished ${data.simulation.done} games`}</span>{/if}
+					</div>
+					{#if data.simulation?.running}
+						<form method="POST" action="?/stopSimulation" use:enhance><input type="hidden" name="sessionId" value={data.sessionId} /><button class="btn secondary" type="submit">Stop</button></form>
+					{:else}
+						<form method="POST" action="?/simulate" use:enhance class="row">
+							<input type="hidden" name="sessionId" value={data.sessionId} />
+							<select name="stepMs" aria-label="Speed">
+								<option value="400">Watchable (one action per room every 0.4 s)</option>
+								<option value="60">Fast</option>
+								<option value="0">Instant</option>
+							</select>
+							<label class="check small"><input type="checkbox" name="approve" checked /> Approve each round</label>
+							<button class="btn" type="submit">Auto-play unscored games</button>
+						</form>
+					{/if}
+				</div>
+			</div>
+		{/if}
 		<h2 class="sec">Rooms</h2>
 		<div class="rooms">
 			{#each data.rooms as r (r.id)}
@@ -276,6 +301,10 @@
 <style>
 	.sec {
 		margin: 22px 0 10px;
+	}
+	.sim {
+		margin-top: 14px;
+		border-left: 6px solid var(--suscc-gold);
 	}
 	.rooms {
 		display: grid;
