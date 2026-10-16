@@ -258,3 +258,17 @@ export const appSettings = sqliteTable('app_settings', {
 	key: text('key').primaryKey(),
 	value: text('value', { mode: 'json' })
 });
+
+/** How the head scorekeeper broke a tie that the rules could not (recorded, never silent). */
+export const tieResolutions = sqliteTable('tie_resolutions', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	eventId: integer('event_id').notNull().references(() => events.id),
+	kind: text('kind', { enum: ['team', 'individual'] }).notNull(),
+	groupKey: text('group_key').notNull(),
+	/** Entity IDs (teams or players) in the decided order, best first. */
+	ordered: text('ordered', { mode: 'json' }).$type<string[]>().notNull(),
+	note: text('note').notNull(),
+	decidedBy: text('decided_by').notNull(),
+	active: integer('active', { mode: 'boolean' }).notNull().default(true),
+	createdAt: createdAt()
+});

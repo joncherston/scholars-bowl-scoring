@@ -370,6 +370,20 @@ describe('computeRound: undo and corrections never delete', () => {
 		expect(computeRound(L.events, HS).status).toBe('approved');
 	});
 
+	it('scoring entries added after approval (e.g. from an imported file) require re-approval', () => {
+		const L = new LogBuilder();
+		L.start();
+		L.correct(1, 'A', 'a1');
+		L.end();
+		L.add({ type: 'submitted', scoreA: 1000, scoreB: 0 });
+		L.add({ type: 'approved' }, 'user:1');
+		expect(computeRound(L.events, HS).status).toBe('approved');
+		L.dead(2);
+		const r = computeRound(L.events, HS);
+		expect(r.status).toBe('submitted');
+		expect(kinds(r)).toContain('edited_after_submission');
+	});
+
 	it('is independent of input order (sorted by seq)', () => {
 		const L = new LogBuilder();
 		L.start();

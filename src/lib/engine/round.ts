@@ -199,7 +199,8 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 	let ended: { reason: string; note: string | null } | null = null;
 	let submitted: RoundResult['submitted'] = null;
 	let approvedSeq: number | null = null;
-	let lastCorrectionSeq = -Infinity;
+	/** Latest scoring change or correction; an approval older than this no longer stands. */
+	let lastChangeSeq = -Infinity;
 	let lastChangeAfterSubmit = false;
 	const items: Item[] = [];
 
@@ -212,6 +213,7 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 				continue;
 			}
 			items.push({ body: b, sortSeq: e.seq, eventId: e.id, amended: false });
+			lastChangeSeq = e.seq;
 			if (submitted && e.seq > submitted.seq) lastChangeAfterSubmit = true;
 			continue;
 		}
@@ -243,7 +245,7 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 				approvedSeq = null;
 				break;
 			case 'correction': {
-				lastCorrectionSeq = e.seq;
+				lastChangeSeq = e.seq;
 				if (submitted) lastChangeAfterSubmit = true;
 				if (b.action === 'amend' || b.action === 'add') {
 					if (!validScoringBody(b.replacement)) {
@@ -488,7 +490,7 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 	const tied = winner === null;
 
 	// 6. Status and round-level flags.
-	const approved = approvedSeq !== null && lastCorrectionSeq < approvedSeq;
+	const approved = approvedSeq !== null && lastChangeSeq < approvedSeq;
 	let status: RoundStatus = 'not_started';
 	if (started || items.length > 0) status = 'in_progress';
 	if (ended) status = 'ended';

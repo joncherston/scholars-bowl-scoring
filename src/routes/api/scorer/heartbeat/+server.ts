@@ -1,5 +1,6 @@
 import { publish } from '$lib/server/bus';
 import { getDb, schema } from '$lib/server/db';
+import { reportPending } from '$lib/server/presence';
 import { error, json } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 
@@ -12,6 +13,7 @@ export async function POST({ locals, request }) {
 	const room = db.select().from(schema.rooms).where(eq(schema.rooms.id, a.room.id)).get();
 	const leaseOk = room?.activeDeviceId === a.deviceId;
 	if (leaseOk) {
+		reportPending(a.room.id, Number(info?.pending) || 0);
 		db.update(schema.rooms).set({ lastHeardAt: new Date().toISOString() }).where(eq(schema.rooms.id, a.room.id)).run();
 		publish({ type: 'room', eventId: a.room.eventId, roomId: a.room.id });
 	}
