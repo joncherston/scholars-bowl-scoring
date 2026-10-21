@@ -201,7 +201,7 @@ describe('computeRound: tiebreakers', () => {
 		expect(kinds(r)).toContain('tied_without_tiebreaker');
 	});
 
-	it('first correct tiebreaker answer wins; points count for team, not individual (defaults)', () => {
+	it('first correct tiebreaker answer wins; its points count in the round score only (defaults)', () => {
 		const L = tiedRound();
 		L.add({ type: 'tiebreaker_started' });
 		L.wrong(1, 'A', 'a2', { tiebreaker: true });
@@ -210,7 +210,8 @@ describe('computeRound: tiebreakers', () => {
 		expect(r.winner).toBe('B');
 		expect(r.decidedByTiebreaker).toBe(true);
 		expect(r.teams.B.roundScore).toBe(3000);
-		expect(r.teams.B.totalPoints).toBe(3000);
+		// Tiebreaker points never count toward total points (rule confirmed Oct 21, 2026).
+		expect(r.teams.B.totalPoints).toBe(2000);
 		expect(r.teams.B.tiebreakerPoints).toBe(1000);
 		const b3 = r.players.find((p) => p.playerId === 'b3')!;
 		expect(b3.individualTotal).toBe(0);
@@ -245,6 +246,21 @@ describe('computeRound: tiebreakers', () => {
 		const r = computeRound(L.events, HS);
 		expect(r.currentTossup).toEqual({ number: 2, tiebreaker: true });
 		expect(r.tied).toBe(true);
+	});
+});
+
+describe('computeRound: forfeits', () => {
+	it('the other team wins 0–0, nobody is credited, and the round is final; voiding the forfeit restores it', () => {
+		const L = new LogBuilder();
+		L.start(['a1'], ['b1']);
+		L.correct(1, 'A', 'a1');
+		const f = L.add({ type: 'forfeit', side: 'A', reason: 'Team went home' }, 'user:1');
+		let r = computeRound(L.events, HS);
+		expect([r.status, r.winner, r.forfeit?.side, r.teams.A.totalPoints, r.teams.B.totalPoints, r.players, r.lineups]).toEqual(['forfeit', 'B', 'A', 0, 0, [], { A: [], B: [] }]);
+		expect(kinds(r)).toEqual(['forfeit_scoring_ignored']);
+		L.add({ type: 'correction', action: 'void', target: f, reason: 'Recorded on the wrong game' }, 'user:1');
+		r = computeRound(L.events, HS);
+		expect([r.status, r.forfeit, r.teams.A.roundScore, r.winner]).toEqual(['in_progress', null, 1000, 'A']);
 	});
 });
 

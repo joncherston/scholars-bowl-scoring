@@ -276,6 +276,11 @@ export function buildPreview(rows: RegistrationRow[], existing: ExistingTeam[], 
 			if (ex.withdrawn) p.changes.push({ field: 'Withdrawn', from: 'yes', to: 'no' });
 			p.action = p.changes.length ? 'update' : 'unchanged';
 			p.include = p.action === 'update';
+			// A no-show withdrawn at check-in is still "confirmed" online; don't reinstate it by default.
+			if (ex.withdrawn) {
+				p.include = false;
+				p.notes.push('Team was marked withdrawn here. Tick to bring it back.');
+			}
 			return p;
 		}
 		if (r.isTest) {

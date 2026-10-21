@@ -22,8 +22,8 @@
 	};
 	const rounds = $derived(Array.from({ length: data.roundCount ?? 0 }, (_, i) => i + 1));
 	const cell = (r: number, roomId: number) => data.matches?.find((m) => m.roundNo === r && m.roomId === roomId);
-	const statusLabel: Record<string, string> = { not_started: 'Not started', in_progress: 'In progress', ended: 'Reviewing', submitted: 'Awaiting approval', approved: 'Approved' };
-	const statusBadge: Record<string, string> = { not_started: '', in_progress: 'info', ended: 'warn', submitted: 'warn', approved: 'ok' };
+	const statusLabel: Record<string, string> = { not_started: 'Not started', in_progress: 'In progress', ended: 'Reviewing', submitted: 'Awaiting approval', approved: 'Approved', forfeit: 'Forfeit' };
+	const statusBadge: Record<string, string> = { not_started: '', in_progress: 'info', ended: 'warn', submitted: 'warn', approved: 'ok', forfeit: 'ok' };
 	const errorFlags = $derived(data.flags?.filter((f) => f.level === 'error') ?? []);
 	const warnFlags = $derived(data.flags?.filter((f) => f.level === 'warning') ?? []);
 	const infoFlags = $derived(data.flags?.filter((f) => f.level === 'info') ?? []);
@@ -147,7 +147,7 @@
 						<div class="teams">{m.teamA} <span class="muted">vs</span> {m.teamB}</div>
 						<div class="row between">
 							<span class="badge {statusBadge[m.status]}">{statusLabel[m.status]}{m.status === 'in_progress' ? ` · ${m.tossup.tiebreaker ? 'TB' : 'TU'} ${m.tossup.number}` : ''}</span>
-							{#if m.status !== 'not_started'}<span class="score num">{formatPoints(m.scoreA)}–{formatPoints(m.scoreB)}</span>{/if}
+							{#if m.status !== 'not_started' && m.status !== 'forfeit'}<span class="score num">{formatPoints(m.scoreA)}–{formatPoints(m.scoreB)}</span>{/if}
 						</div>
 					{:else}
 						<div class="muted small">No games</div>
@@ -173,7 +173,7 @@
 											<span class="t">{m.teamA} <span class="muted">v</span> {m.teamB}</span>
 											<span class="row between">
 												<span class="badge {statusBadge[m.status]}">{statusLabel[m.status]}</span>
-												{#if m.status !== 'not_started'}<span class="num">{formatPoints(m.scoreA)}–{formatPoints(m.scoreB)}</span>{/if}
+												{#if m.status !== 'not_started' && m.status !== 'forfeit'}<span class="num">{formatPoints(m.scoreA)}–{formatPoints(m.scoreB)}</span>{/if}
 											</span>
 											{#if !m.counts}<span class="small muted">non-counter</span>{/if}
 											{#if m.flagCount}<span class="small flagc">⚑ {m.flagCount} to check</span>{/if}
@@ -199,9 +199,9 @@
 					<h2 class="sec">Standings <span class="muted small">(provisional: submitted and approved rounds)</span></h2>
 					<label class="check small"><input type="checkbox" bind:checked={showPools} /> Show pools</label>
 				</div>
-				{#each showPools ? data.poolStandings : data.classStandings as g (g.key)}
+				{#each showPools ? data.poolStandings : data.divisionStandings as g (g.key)}
 					<div class="card stand">
-						<h3>{g.label}{#if g.soleTeam}&nbsp;<span class="badge">only team in classification</span>{/if}</h3>
+						<h3>{g.label}{#if g.soleTeam}&nbsp;<span class="badge">only team in {showPools ? 'pool' : 'division'}</span>{/if}{#if !showPools && g.spansSessions}&nbsp;<span class="badge warn">ranked across sessions</span>{/if}</h3>
 						<table class="data">
 							<thead><tr><th>Place</th><th>Team</th><th class="num">W–L</th><th class="num">Points</th></tr></thead>
 							<tbody>
@@ -220,6 +220,17 @@
 			</div>
 			<div>
 				<h2 class="sec">Needs attention</h2>
+				{#each data.withdrawn as w (w.teamId)}
+					<div class="card withdrawn">
+						<strong>{w.name} has withdrawn.</strong> Counting games not played yet:
+						<ul>{#each w.games as g (g.matchId)}<li><a href="{base}/live/match/{g.matchId}">Round {g.roundNo}, {g.roomName}, vs {g.opponent}</a></li>{/each}</ul>
+						<form method="POST" action="?/forfeitAll" use:enhance onsubmit={(e) => { const r = prompt(`Why does ${w.name} forfeit its remaining games?`); if (!r) { e.preventDefault(); return; } (e.currentTarget.querySelector('[name=reason]') as HTMLInputElement).value = r; }}>
+							<input type="hidden" name="teamId" value={w.teamId} /><input type="hidden" name="reason" />
+							<button class="btn small" type="submit">Record forfeits for all remaining games</button>
+						</form>
+						<p class="muted small">Each opponent gets a win; neither team scores points.</p>
+					</div>
+				{/each}
 				<div class="card flags">
 					{#if !errorFlags.length && !warnFlags.length}<p class="muted">Nothing needs attention right now.</p>{/if}
 					{#each errorFlags as f, i (i)}
@@ -428,6 +439,13 @@
 	.flags {
 		display: grid;
 		gap: 8px;
+	}
+	.withdrawn {
+		margin-bottom: 10px;
+		border-left: 4px solid var(--warn, #b54708);
+	}
+	.withdrawn ul {
+		margin: 6px 0 10px;
 	}
 	.flag {
 		display: grid;

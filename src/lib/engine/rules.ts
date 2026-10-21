@@ -8,7 +8,7 @@
 
 export type RoundingMode = 'exact' | 'half_up' | 'down';
 export type StandingsCriterion = 'roundsWon' | 'totalPoints' | 'headToHead';
-export type IndividualGrouping = 'classification' | 'session' | 'overall';
+export type IndividualGrouping = 'division' | 'classification' | 'session' | 'overall';
 
 export interface RuleSettings {
 	/** Points for a correct tossup, in hundredths. */
@@ -53,8 +53,12 @@ export interface RuleSettings {
 		teamPlaces: number;
 		individualPlaces: number;
 		individualGrouping: IndividualGrouping;
-		/** Team awards are given per classification within each session. */
-		perSession: boolean;
+		/**
+		 * Award division for each classification. Team awards (and individual awards when grouped
+		 * by division) are ranked within a division across the whole event. A classification not
+		 * listed is its own division.
+		 */
+		divisions: Record<string, string>;
 	};
 	maxRoundsPerSession: number;
 }
@@ -64,13 +68,29 @@ export const CONFIRM_ITEMS = [
 	{ key: 'tossup', label: 'Tossup value, powers, and negs' },
 	{ key: 'bonus', label: 'Bonus split across parts, and bounceback' },
 	{ key: 'individual', label: 'Individual scores count tossups only' },
-	{ key: 'tiebreaker', label: 'Tiebreaker points count toward team score and total points' },
+	{ key: 'tiebreaker', label: 'Tiebreaker points decide the game but never count toward total points or individual scores.' },
 	{ key: 'round', label: 'Round time limit and minimum tossups' },
-	{ key: 'teamAwards', label: 'Team award places and per-session awards' },
+	{ key: 'teamAwards', label: 'Team award places' },
+	{ key: 'divisions', label: 'Award divisions: which classifications are awarded together (team and individual)' },
 	{ key: 'individualAwards', label: 'Individual award grouping and number of places' },
 	{ key: 'individualTies', label: 'Individual tie-breaking method' }
 ] as const;
 export type ConfirmKey = (typeof CONFIRM_ITEMS)[number]['key'];
+
+/** Awards are given for Private, Public 1A–3A, and Public 4A–7A (confirmed Oct 21, 2026). */
+export const DEFAULT_DIVISIONS: Record<string, string> = {
+	Private: 'Private',
+	'1A': 'Public 1A–3A',
+	'2A': 'Public 1A–3A',
+	'3A': 'Public 1A–3A',
+	'4A': 'Public 4A–7A',
+	'5A': 'Public 4A–7A',
+	'6A': 'Public 4A–7A',
+	'7A': 'Public 4A–7A'
+};
+
+/** The award division a classification belongs to. */
+export const divisionOf = (rules: RuleSettings, classification: string) => rules.awards.divisions[classification]?.trim() || classification;
 
 export const HIGH_SCHOOL_DEFAULTS: RuleSettings = {
 	tossupPoints: 1000,
@@ -83,7 +103,7 @@ export const HIGH_SCHOOL_DEFAULTS: RuleSettings = {
 		defaultParts: 1
 	},
 	individual: { includeBonus: false, includeTiebreaker: false },
-	tiebreaker: { countsInRoundScore: true, countsInTotalPoints: true },
+	tiebreaker: { countsInRoundScore: true, countsInTotalPoints: false },
 	round: {
 		maxTossups: 25,
 		announceAfterTossup: 12,
@@ -93,7 +113,7 @@ export const HIGH_SCHOOL_DEFAULTS: RuleSettings = {
 	},
 	roster: { maxPlayers: 6, activePlayers: 4 },
 	standings: { order: ['roundsWon', 'totalPoints', 'headToHead'] },
-	awards: { teamPlaces: 1, individualPlaces: 3, individualGrouping: 'classification', perSession: true },
+	awards: { teamPlaces: 1, individualPlaces: 3, individualGrouping: 'division', divisions: { ...DEFAULT_DIVISIONS } },
 	maxRoundsPerSession: 12
 };
 

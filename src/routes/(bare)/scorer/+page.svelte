@@ -223,7 +223,7 @@
 	// ---------- Game selection ----------
 	function chooseDefault() {
 		const ms = store.state?.matches ?? [];
-		const open = ms.find((m) => !['submitted', 'approved'].includes(statusOf(m)));
+		const open = ms.find((m) => !['submitted', 'approved', 'forfeit'].includes(statusOf(m)));
 		matchId = (open ?? ms[ms.length - 1])?.id ?? null;
 	}
 	function openGame(id: number) {
@@ -233,7 +233,7 @@
 	const nextGame = $derived.by(() => {
 		const ms = store.state?.matches ?? [];
 		const i = ms.findIndex((m) => m.id === matchId);
-		return ms.slice(i + 1).find((m) => !['submitted', 'approved'].includes(statusOf(m)));
+		return ms.slice(i + 1).find((m) => !['submitted', 'approved', 'forfeit'].includes(statusOf(m)));
 	});
 
 	// ---------- Status ----------
@@ -423,14 +423,24 @@
 							<span class="g-teams">{m.teams.A.name} vs {m.teams.B.name}</span>
 							<span class="g-st">
 								{#if !m.counts}<span class="badge">Non-counter</span>{/if}
-								<span class="badge {st === 'approved' ? 'ok' : st === 'submitted' ? 'info' : st === 'not_started' ? '' : 'warn'}">
-									{{ not_started: 'Not started', in_progress: 'In progress', ended: 'Ready to submit', submitted: 'Submitted', approved: 'Approved' }[st]}
+								<span class="badge {st === 'approved' || st === 'forfeit' ? 'ok' : st === 'submitted' ? 'info' : st === 'not_started' ? '' : 'warn'}">
+									{{ not_started: 'Not started', in_progress: 'In progress', ended: 'Ready to submit', submitted: 'Submitted', approved: 'Approved', forfeit: 'Forfeit' }[st]}
 								</span>
 							</span>
 						</button>
 					</li>
 				{/each}
 			</ul>
+		</div>
+	{:else if status === 'forfeit'}
+		<div class="card center">
+			<h2>{match.sessionName} · Round {match.roundNo}: {match.teams.A.name} vs {match.teams.B.name}</h2>
+			<p class="alert info">Forfeit recorded — nothing to score.</p>
+			{#if result.forfeit}<p class="muted">{match.teams[result.forfeit.side].name} forfeited this game. The head scorekeeper recorded it.</p>{/if}
+			<div class="row" style="justify-content: center; margin-top: 14px">
+				{#if nextGame}<button class="btn large" type="button" onclick={() => openGame(nextGame.id)}>Next game: Round {nextGame.roundNo} →</button>{/if}
+				<button class="btn secondary" type="button" onclick={() => (showGames = true)}>All games</button>
+			</div>
 		</div>
 	{:else if status === 'not_started'}
 		<div class="card">

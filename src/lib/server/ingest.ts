@@ -50,7 +50,7 @@ export const ROOM_TYPES: ReadonlySet<EventBody['type']> = new Set([
 	'device_takeover'
 ]);
 
-export const STAFF_TYPES: ReadonlySet<EventBody['type']> = new Set(['correction', 'approved', 'unapproved', 'note']);
+export const STAFF_TYPES: ReadonlySet<EventBody['type']> = new Set(['correction', 'approved', 'unapproved', 'note', 'forfeit']);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const side = (s: unknown) => s === 'A' || s === 'B';
@@ -103,6 +103,8 @@ export function validBody(b: EventBody): boolean {
 			return str(b.text, 2000);
 		case 'device_takeover':
 			return b.previousDevice === null || str(b.previousDevice, 64);
+		case 'forfeit':
+			return side(b.side) && str(b.reason, 1000) && b.reason.trim().length > 0;
 		case 'correction':
 			if (!str(b.reason, 1000) || !b.reason.trim()) return false;
 			if (b.action === 'void') return str(b.target, 64);
@@ -208,8 +210,8 @@ export function ingestEvents(ctx: IngestContext, incoming: IncomingEvent[]): Ing
 			}
 			if (ctx.lockSubmitted) {
 				const status = computeRound(log, rulesForMatch(match, ctx.eventId).settings).status;
-				if (status === 'submitted' || status === 'approved') {
-					reject(e, 'round_submitted');
+				if (status === 'submitted' || status === 'approved' || status === 'forfeit') {
+					reject(e, status === 'forfeit' ? 'round_forfeited' : 'round_submitted');
 					continue;
 				}
 			}

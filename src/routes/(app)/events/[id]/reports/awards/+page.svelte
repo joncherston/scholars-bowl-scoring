@@ -23,19 +23,21 @@
 			{#if s.openTies}<div class="prov">{s.openTies} tie(s) at award places still need a decision</div>{/if}
 
 			<h2>Team awards</h2>
-			{#each s.classes as c (c.label)}
+			{#each s.divisions as c (c.label)}
 				<div class="award">
 					<h3>{c.label}</h3>
 					{#each c.places as p (p.team)}
 						<div class="place">
 							<span class="pl">{p.placeLabel} place</span>
 							<span class="who">{p.team}</span>
-							<span class="detail">{p.record}, {p.points} pts</span>
+							<span class="detail">{p.classification} · {p.record}, {p.points} pts</span>
 						</div>
 						{#if p.tied}<div class="note">⚠ Tied — not yet decided</div>{/if}
 						{#if p.resolved}<div class="note">Tie decided: {p.resolved}</div>{/if}
 					{/each}
-					{#if c.soleTeam}<div class="note">Only team in this classification.</div>{/if}
+					{#if c.soleTeam}<div class="note">Only team in this division.</div>{/if}
+					{#if c.spans}<div class="note">Ranked across the {c.spans} sessions.</div>{/if}
+					{#if c.provisional && s.mode === 'final'}<div class="note">Provisional: another session in this division is not finalized.</div>{/if}
 				</div>
 			{/each}
 

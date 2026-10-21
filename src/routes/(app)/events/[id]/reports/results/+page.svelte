@@ -2,7 +2,7 @@
 	let { data } = $props();
 	const r = $derived(data.results);
 	const rounds = $derived([...new Set(r.matches.map((m) => m.roundNo))]);
-	const statusText: Record<string, string> = { not_started: 'not played', in_progress: 'in progress', ended: 'not submitted', submitted: 'awaiting approval', approved: '' };
+	const statusText: Record<string, string> = { not_started: 'not played', in_progress: 'in progress', ended: 'not submitted', submitted: 'awaiting approval', approved: '', forfeit: '' };
 </script>
 
 <svelte:head><title>Full results · {r.session.name} · {r.event.name}</title></svelte:head>
@@ -17,21 +17,22 @@
 		</div>
 	</header>
 
-	<h2>Standings by classification</h2>
-	{#each r.classifications as g (g.label)}
-		<h3>{g.label}{g.soleTeam ? ' (only team in classification)' : ''}</h3>
+	<h2>Standings by award division</h2>
+	<p class="small">Points are the sum of each team's scores in its counting games. Tiebreaker points never count.</p>
+	{#each r.divisions as g (g.label)}
+		<h3>{g.label}{g.soleTeam ? ' (only team in division)' : ''}{g.spans ? ` (ranked across the ${g.spans} sessions)` : ''}{g.provisional && r.mode === 'final' ? ' (provisional)' : ''}</h3>
 		<table class="t">
-			<thead><tr><th>Place</th><th>Team</th><th>W</th><th>L</th><th>Games</th><th>Points</th><th>Against</th></tr></thead>
+			<thead><tr><th>Place</th><th>Team</th><th>Class.</th><th>W</th><th>L</th><th>Games</th><th>Points</th><th>Against</th></tr></thead>
 			<tbody>
 				{#each g.rows as row (row.team)}
-					<tr><td>{row.place}{row.tied ? ' (tie)' : ''}{row.resolved ? ' *' : ''}</td><td class="l">{row.team}</td><td>{row.wins}</td><td>{row.losses}</td><td>{row.played}</td><td>{row.points}</td><td>{row.against}</td></tr>
+					<tr><td>{row.place}{row.tied ? ' (tie)' : ''}{row.resolved ? ' *' : ''}</td><td class="l">{row.team}</td><td>{row.classification}</td><td>{row.wins}</td><td>{row.losses}</td><td>{row.played}</td><td>{row.points}</td><td>{row.against}</td></tr>
 				{/each}
 			</tbody>
 		</table>
 		{#each g.rows.filter((x) => x.resolved) as row (row.team)}<p class="fn">* {row.team}: tie decided — {row.resolved}</p>{/each}
 	{/each}
 
-	{#if r.pools.length !== r.classifications.length}
+	{#if r.pools.length !== r.divisions.length}
 		<h2>Pool standings</h2>
 		{#each r.pools as g (g.label)}
 			<h3>{g.label}</h3>
@@ -50,9 +51,9 @@
 			<tbody>
 				{#each r.matches.filter((m) => m.roundNo === rn) as m (m.id)}
 					<tr>
-						<td>{m.room}</td><td class="l">{m.teamA}</td><td>{m.status === 'not_started' ? '' : `${m.scoreA}–${m.scoreB}`}</td><td class="l">{m.teamB}</td>
+						<td>{m.room}</td><td class="l">{m.teamA}</td><td>{m.status === 'not_started' ? '' : m.status === 'forfeit' ? 'forfeit' : `${m.scoreA}–${m.scoreB}`}</td><td class="l">{m.teamB}</td>
 						<td class="l">{m.status === 'not_started' ? '' : (m.winner ?? 'tie')}</td>
-						<td class="l small">{[m.counts ? '' : 'non-counter', m.tiebreaker ? 'tiebreaker' : '', statusText[m.status]].filter(Boolean).join(', ')}</td>
+						<td class="l small">{[m.counts ? '' : 'non-counter', m.note, statusText[m.status]].filter(Boolean).join(', ')}</td>
 					</tr>
 				{/each}
 			</tbody>

@@ -1,6 +1,6 @@
 import type { Hundredths } from './points';
 import type { RoundResult } from './round';
-import type { RuleSettings, StandingsCriterion } from './rules';
+import { divisionOf, type RuleSettings, type StandingsCriterion } from './rules';
 import type { RoundStatus, Side } from './types';
 
 export interface TeamInfo {
@@ -81,10 +81,14 @@ export interface StandingRow {
 
 export interface StandingGroup {
 	key: string;
-	kind: 'pool' | 'classification';
-	sessionId: string;
+	/** pool: who plays whom. classification: information only. division: awards. */
+	kind: 'pool' | 'classification' | 'division';
+	/** The group's session, or null for a division whose teams are in more than one session. */
+	sessionId: string | null;
+	sessionIds: string[];
 	label: string;
 	classification: string | null;
+	division: string | null;
 	rows: StandingRow[];
 	soleTeam: boolean;
 }
@@ -104,8 +108,11 @@ export interface IndividualRow {
 export interface IndividualGroup {
 	key: string;
 	label: string;
+	/** The group's session, or null when its players come from more than one session. */
 	sessionId: string | null;
+	sessionIds: string[];
 	classification: string | null;
+	division: string | null;
 	rows: IndividualRow[];
 }
 
@@ -115,7 +122,9 @@ export type StandingsFlagKind =
 	| 'unequal_games'
 	| 'fractional_points'
 	| 'unresolved_round_tie'
-	| 'sole_team';
+	| 'sole_team'
+	| 'division_split_pools'
+	| 'division_spans_sessions';
 
 export interface StandingsFlag {
 	kind: StandingsFlagKind;
@@ -138,7 +147,10 @@ export interface StandingsInput {
 export interface Standings {
 	records: Record<string, TeamRecord>;
 	pools: StandingGroup[];
+	/** Per classification within each session. Information only: awards use divisions. */
 	classifications: StandingGroup[];
+	/** Award divisions, each ranked across the whole event. */
+	divisions: StandingGroup[];
 	individuals: IndividualGroup[];
 	/** Counting matches whose results are not included yet. */
 	pendingMatchIds: string[];
@@ -146,8 +158,8 @@ export interface Standings {
 }
 
 const INCLUDED: Record<StandingsInput['mode'], Set<RoundStatus>> = {
-	final: new Set(['approved']),
-	provisional: new Set(['submitted', 'approved'])
+	final: new Set(['approved', 'forfeit']),
+	provisional: new Set(['submitted', 'approved', 'forfeit'])
 };
 
 /**
@@ -219,28 +231,38 @@ export function computeStandings(input: StandingsInput): Standings {
 		}
 	}
 
-	// Team groups: pools (display) and classifications (awards).
-	const poolGroups = new Map<string, { label: string; sessionId: string; ids: string[] }>();
-	const classGroups = new Map<string, { label: string; sessionId: string; classification: string; ids: string[] }>();
-	for (const t of teams) {
-		const pk = `${t.sessionId}|pool:${t.poolId ?? `class:${t.classification}`}`;
-		const pg = poolGroups.get(pk) ?? { label: t.poolName ?? t.classification, sessionId: t.sessionId, ids: [] };
-		pg.ids.push(t.id);
-		poolGroups.set(pk, pg);
-		const ck = rules.awards.perSession ? `${t.sessionId}|class:${t.classification}` : `all|class:${t.classification}`;
-		const cg = classGroups.get(ck) ?? { label: t.classification, sessionId: t.sessionId, classification: t.classification, ids: [] };
-		cg.ids.push(t.id);
-		classGroups.set(ck, cg);
+	// Team groups: pools (who plays whom), classifications (information), and award divisions.
+	interface Group {
+		label: string;
+		classification: string | null;
+		division: string | null;
+		ids: string[];
 	}
+	const poolGroups = new Map<string, Group>();
+	const classGroups = new Map<string, Group>();
+	const divGroups = new Map<string, Group>();
+	const addTo = (groups: Map<string, Group>, key: string, init: Omit<Group, 'ids'>, id: string) => {
+		const g = groups.get(key) ?? { ...init, ids: [] };
+		g.ids.push(id);
+		groups.set(key, g);
+	};
+	const poolKeyOf = (t: TeamInfo) => `${t.sessionId}|pool:${t.poolId ?? `class:${t.classification}`}`;
+	for (const t of teams) {
+		addTo(poolGroups, poolKeyOf(t), { label: t.poolName ?? t.classification, classification: null, division: null }, t.id);
+		addTo(classGroups, `${t.sessionId}|class:${t.classification}`, { label: t.classification, classification: t.classification, division: null }, t.id);
+		const d = divisionOf(rules, t.classification);
+		addTo(divGroups, `division:${d}`, { label: d, classification: null, division: d }, t.id);
+	}
+	const sessionsOf = (ids: string[]) => [...new Set(ids.map((id) => teamById.get(id)!.sessionId))].sort();
 
-	const rankGroup = (key: string, kind: StandingGroup['kind'], g: { label: string; sessionId: string; ids: string[] }, classification: string | null): StandingGroup => {
+	const rankGroup = (key: string, kind: StandingGroup['kind'], g: Group): StandingGroup => {
 		const tiers = rankTiers(g.ids, rules.standings.order, records);
 		const rows: StandingRow[] = [];
 		let place = 1;
 		for (const tier of tiers) {
 			const sortedTier = [...tier].sort((a, b) => (teamById.get(a)?.name ?? '').localeCompare(teamById.get(b)?.name ?? ''));
 			for (const id of sortedTier) rows.push({ teamId: id, place, tied: tier.length > 1, record: records[id] });
-			if (kind === 'classification' && tier.length > 1 && place <= rules.awards.teamPlaces)
+			if (kind === 'division' && tier.length > 1 && place <= rules.awards.teamPlaces)
 				flags.push({
 					kind: 'team_tie',
 					message: `${g.label}: ${tier.length} teams tied for place ${place} after all tie-breakers`,
@@ -249,46 +271,58 @@ export function computeStandings(input: StandingsInput): Standings {
 				});
 			place += tier.length;
 		}
-		const played = new Set(g.ids.map((id) => records[id].played));
-		if (played.size > 1)
-			flags.push({ kind: 'unequal_games', message: `${g.label}: teams have played different numbers of counting games`, groupKey: key, teamIds: g.ids });
+		const sessionIds = sessionsOf(g.ids);
 		const soleTeam = g.ids.length === 1;
-		if (soleTeam && kind === 'classification')
-			flags.push({ kind: 'sole_team', message: `${g.label}: only team in its classification`, groupKey: key, teamIds: g.ids });
-		return { key, kind, sessionId: g.sessionId, label: g.label, classification, rows, soleTeam };
+		if (kind !== 'classification') {
+			const played = new Set(g.ids.map((id) => records[id].played));
+			if (played.size > 1)
+				flags.push({ kind: 'unequal_games', message: `${g.label}: teams have played different numbers of counting games`, groupKey: key, teamIds: g.ids });
+		}
+		if (kind === 'division') {
+			if (soleTeam) flags.push({ kind: 'sole_team', message: `${g.label}: only team in its award division`, groupKey: key, teamIds: g.ids });
+			if (sessionIds.length > 1)
+				flags.push({ kind: 'division_spans_sessions', message: `${g.label}: teams from different sessions are ranked together for awards`, groupKey: key, teamIds: g.ids });
+			else if (new Set(g.ids.map((id) => poolKeyOf(teamById.get(id)!))).size > 1)
+				flags.push({ kind: 'division_split_pools', message: `${g.label}: teams in different pools didn't all play each other.`, groupKey: key, teamIds: g.ids });
+		}
+		return { key, kind, sessionId: sessionIds.length === 1 ? sessionIds[0] : null, sessionIds, label: g.label, classification: g.classification, division: g.division, rows, soleTeam };
 	};
 
-	const pools = [...poolGroups].map(([k, g]) => rankGroup(k, 'pool', g, null));
-	const classifications = [...classGroups].map(([k, g]) => rankGroup(k, 'classification', g, g.classification));
+	const pools = [...poolGroups].map(([k, g]) => rankGroup(k, 'pool', g));
+	const classifications = [...classGroups].map(([k, g]) => rankGroup(k, 'classification', g));
+	const divisions = [...divGroups].map(([k, g]) => rankGroup(k, 'division', g));
+	const divisionSessions = new Map(divisions.map((g) => [g.division!, g.sessionIds]));
 
 	// Individual leaderboards.
-	const indGroups = new Map<string, { label: string; sessionId: string | null; classification: string | null; rows: PlayerAgg[] }>();
+	const indGroups = new Map<string, Omit<IndividualGroup, 'key' | 'rows'> & { rows: PlayerAgg[] }>();
+	const allSessions = sessionsOf(teams.map((t) => t.id));
 	for (const a of playerAgg.values()) {
 		const t = teamById.get(a.teamId);
 		if (!t) continue;
-		let key: string, label: string, sessionId: string | null, classification: string | null;
+		let key: string, g: Omit<IndividualGroup, 'key' | 'rows'>;
 		switch (rules.awards.individualGrouping) {
+			case 'division': {
+				const d = divisionOf(rules, t.classification);
+				const sessionIds = divisionSessions.get(d) ?? [t.sessionId];
+				key = `division:${d}`;
+				g = { label: d, sessionId: sessionIds.length === 1 ? sessionIds[0] : null, sessionIds, classification: null, division: d };
+				break;
+			}
 			case 'classification':
 				key = `${t.sessionId}|class:${t.classification}`;
-				label = t.classification;
-				sessionId = t.sessionId;
-				classification = t.classification;
+				g = { label: t.classification, sessionId: t.sessionId, sessionIds: [t.sessionId], classification: t.classification, division: null };
 				break;
 			case 'session':
 				key = `${t.sessionId}`;
-				label = t.sessionName ?? 'Session';
-				sessionId = t.sessionId;
-				classification = null;
+				g = { label: t.sessionName ?? 'Session', sessionId: t.sessionId, sessionIds: [t.sessionId], classification: null, division: null };
 				break;
 			default:
 				key = 'overall';
-				label = 'Overall';
-				sessionId = null;
-				classification = null;
+				g = { label: 'Overall', sessionId: null, sessionIds: allSessions, classification: null, division: null };
 		}
-		const g = indGroups.get(key) ?? { label, sessionId, classification, rows: [] };
-		g.rows.push(a);
-		indGroups.set(key, g);
+		const grp = indGroups.get(key) ?? { ...g, rows: [] };
+		grp.rows.push(a);
+		indGroups.set(key, grp);
 	}
 	const individuals: IndividualGroup[] = [];
 	for (const [key, g] of indGroups) {
@@ -310,10 +344,10 @@ export function computeStandings(input: StandingsInput): Standings {
 				});
 			i = j;
 		}
-		individuals.push({ key, label: g.label, sessionId: g.sessionId, classification: g.classification, rows });
+		individuals.push({ key, label: g.label, sessionId: g.sessionId, sessionIds: g.sessionIds, classification: g.classification, division: g.division, rows });
 	}
 
-	return { records, pools, classifications, individuals, pendingMatchIds, flags };
+	return { records, pools, classifications, divisions, individuals, pendingMatchIds, flags };
 }
 
 /** Split teams into ordered tiers using each criterion in turn; head-to-head is computed within the tied group. */

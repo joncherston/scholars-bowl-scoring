@@ -76,6 +76,9 @@ describe('property: totals always equal the sum of their parts', () => {
 		fc.assert(
 			fc.property(fc.array(actionArb, { maxLength: 80 }), rulesArb, (actions, rules) => {
 				const r = computeRound(buildLog(actions), rules);
+				// Tiebreaker points count only when regulation is level (a correction can break the tie).
+				const regulation = (s: 'A' | 'B') => r.teams[s].tossupPoints + r.teams[s].negPoints + r.teams[s].bonusPoints + r.teams[s].bouncebackPoints;
+				const tbCounts = regulation('A') === regulation('B');
 				for (const s of ['A', 'B'] as const) {
 					const t = r.teams[s];
 					// Round score is the sum of what each tossup line added.
@@ -85,7 +88,7 @@ describe('property: totals always equal the sum of their parts', () => {
 					expect(r.tossups.length ? r.tossups.at(-1)!.running[s] : 0).toBe(t.roundScore);
 					// Round score is the sum of its components.
 					expect(t.roundScore).toBe(
-						t.tossupPoints + t.negPoints + t.bonusPoints + t.bouncebackPoints + (rules.tiebreaker.countsInRoundScore ? t.tiebreakerPoints : 0)
+						t.tossupPoints + t.negPoints + t.bonusPoints + t.bouncebackPoints + (rules.tiebreaker.countsInRoundScore && tbCounts ? t.tiebreakerPoints : 0)
 					);
 					// Answer-level points add up to the team's tossup, neg, and tiebreaker points.
 					let answerPts = 0;
@@ -110,7 +113,7 @@ describe('property: totals always equal the sum of their parts', () => {
 						p.tossupPoints +
 							p.negPoints +
 							(rules.individual.includeBonus ? p.bonusPoints : 0) +
-							(rules.individual.includeTiebreaker ? p.tiebreakerPoints : 0)
+							(rules.individual.includeTiebreaker && tbCounts ? p.tiebreakerPoints : 0)
 					);
 				}
 				// The audit lists every event exactly once.

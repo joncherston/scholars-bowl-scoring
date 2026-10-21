@@ -15,7 +15,7 @@
 	const nameOf = (id: string | null) => (id ? (m.teams.A.roster.find((p) => p.id === id)?.name ?? m.teams.B.roster.find((p) => p.id === id)?.name ?? 'Unknown player') : 'Team');
 	const teamNames = $derived({ A: m.teams.A.name, B: m.teams.B.name });
 	const when = (iso?: string) => (iso ? new Date(iso.endsWith('Z') ? iso : `${iso}Z`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '');
-	const trail = $derived(result.audit.filter((a) => ['submitted', 'approved', 'unapproved', 'round_ended'].includes(a.event.body.type) || (a.event.body.type === 'correction' && a.event.body.action === 'void' && a.event.body.reason.startsWith('Returned'))));
+	const trail = $derived(result.audit.filter((a) => ['submitted', 'approved', 'unapproved', 'round_ended', 'forfeit'].includes(a.event.body.type) || (a.event.body.type === 'correction' && a.event.body.action === 'void' && a.event.body.reason.startsWith('Returned'))));
 	const finalized = $derived(!!data.session.finalizedAt);
 
 	// ---- Correction dialog ----
@@ -82,7 +82,13 @@
 	{#if form?.error}<div class="alert error" role="alert">{form.error}</div>{/if}
 	{#if form && 'message' in form}<div class="alert success" role="status">{form.message}</div>{/if}
 
-	<Scoreboard nameA={m.teams.A.name} nameB={m.teams.B.name} scoreA={result.teams.A.roundScore} scoreB={result.teams.B.roundScore} label={{ not_started: 'Not started', in_progress: 'In progress', ended: 'Reviewing', submitted: 'Submitted', approved: 'Approved' }[result.status]} counts={m.counts} winner={result.status === 'submitted' || result.status === 'approved' ? result.winner : null} compact />
+	<Scoreboard nameA={m.teams.A.name} nameB={m.teams.B.name} scoreA={result.teams.A.roundScore} scoreB={result.teams.B.roundScore} label={{ not_started: 'Not started', in_progress: 'In progress', ended: 'Reviewing', submitted: 'Submitted', approved: 'Approved', forfeit: 'Forfeit' }[result.status]} counts={m.counts} winner={result.status === 'submitted' || result.status === 'approved' || result.status === 'forfeit' ? result.winner : null} compact />
+
+	{#if result.forfeit}
+		<div class="alert warning" style="margin-top: 12px">
+			<strong>Forfeit:</strong> {m.teams[result.forfeit.side].name} forfeited ({result.forfeit.reason}). {m.teams[result.forfeit.side === 'A' ? 'B' : 'A'].name} gets the win; neither team scores. This counts as final without approval. To undo it, void the forfeit in the action history below.
+		</div>
+	{/if}
 
 	{#if data.gaps.length}
 		<div class="alert error" style="margin-top: 12px">
@@ -107,6 +113,23 @@
 			{#if result.status === 'approved'}
 				<form method="POST" action="?/unapprove" use:enhance onsubmit={(e) => { const r = prompt('Why withdraw approval?'); if (!r) { e.preventDefault(); return; } (e.currentTarget.querySelector('[name=reason]') as HTMLInputElement).value = r; }}>
 					<input type="hidden" name="reason" /><button class="btn ghost" type="submit" disabled={finalized}>Withdraw approval</button>
+				</form>
+			{/if}
+			{#if !result.forfeit}
+				<form method="POST" action="?/forfeit" use:enhance class="row" onsubmit={(e) => {
+					const f = e.currentTarget;
+					const side = (f.querySelector('[name=side]') as HTMLSelectElement).value as 'A' | 'B' | '';
+					if (!side) { e.preventDefault(); alert('Choose the team that forfeits.'); return; }
+					const r = prompt(`Why does ${m.teams[side].name} forfeit this game?`);
+					if (!r) { e.preventDefault(); return; }
+					(f.querySelector('[name=reason]') as HTMLInputElement).value = r;
+				}}>
+					<select name="side" aria-label="Team that forfeits" disabled={finalized}>
+						<option value="">Team that forfeits…</option>
+						<option value="A">{m.teams.A.name}</option>
+						<option value="B">{m.teams.B.name}</option>
+					</select>
+					<input type="hidden" name="reason" /><button class="btn secondary" type="submit" disabled={finalized}>Record forfeit</button>
 				</form>
 			{/if}
 			<form method="POST" action="?/note" use:enhance class="row" style="flex: 1">
@@ -159,6 +182,15 @@
 									}}>
 										<input type="hidden" name="target" value={a.event.id} /><input type="hidden" name="reason" /><input type="hidden" name="alsoTarget" />
 										<button class="btn small ghost" type="submit">Void…</button>
+									</form>
+								{:else if a.active && b.type === 'forfeit' && !finalized}
+									<form method="POST" action="?/void" use:enhance style="display: inline" onsubmit={(e) => {
+										const r = prompt('Reason for voiding this forfeit?');
+										if (!r) { e.preventDefault(); return; }
+										(e.currentTarget.querySelector('[name=reason]') as HTMLInputElement).value = r;
+									}}>
+										<input type="hidden" name="target" value={a.event.id} /><input type="hidden" name="reason" /><input type="hidden" name="alsoTarget" />
+										<button class="btn small ghost" type="submit">Void forfeit…</button>
 									</form>
 								{/if}
 							</td>

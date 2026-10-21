@@ -148,7 +148,7 @@ describe('computeStandings', () => {
 		expect(prov.records.X.wins).toBe(1);
 	});
 
-	it('pooled classifications play counting games but are ranked per classification', () => {
+	it('pooled classifications are ranked together in their award division', () => {
 		const teams = [team('W', '1A', 'p1'), team('R', '2A', 'p1'), team('D', '3A', 'p1')];
 		const m1 = match('W', 'R');
 		const m2 = match('R', 'D');
@@ -161,9 +161,10 @@ describe('computeStandings', () => {
 		});
 		expect(s.pools).toHaveLength(1);
 		expect(s.pools[0].rows.map((r) => r.teamId)).toEqual(['R', 'W', 'D']);
+		// Classification standings are information only; awards come from the division.
 		expect(s.classifications).toHaveLength(3);
-		expect(s.classifications.every((g) => g.soleTeam && g.rows[0].place === 1)).toBe(true);
-		expect(s.flags.filter((f) => f.kind === 'sole_team')).toHaveLength(3);
+		expect(s.divisions.map((g) => [g.label, g.soleTeam, g.rows.map((r) => r.teamId)])).toEqual([['Public 1A–3A', false, ['R', 'W', 'D']]]);
+		expect(s.flags.filter((f) => f.kind === 'sole_team')).toHaveLength(0);
 	});
 
 	it('individual leaderboards flag ties at award places', () => {
@@ -188,11 +189,13 @@ describe('computeStandings', () => {
 		expect(s.flags.some((f) => f.kind === 'individual_tie' && f.playerIds?.length === 2)).toBe(true);
 	});
 
-	it('individual grouping can be per session or overall', () => {
+	it('individual grouping can be per division, classification, or overall', () => {
 		const teams = [team('X', '1A'), team('Y', '2A')];
 		const m = match('X', 'Y');
 		const outcomes = { [m.id]: outcome(2, 1, { pa: 'x1', pb: 'y1' }) };
-		const perClass = computeStandings({ teams, matches: [m], outcomes, rules: HS, mode: 'final' });
+		const perDivision = computeStandings({ teams, matches: [m], outcomes, rules: HS, mode: 'final' });
+		expect(perDivision.individuals.map((g) => g.label)).toEqual(['Public 1A–3A']);
+		const perClass = computeStandings({ teams, matches: [m], outcomes, rules: rulesWith((r) => (r.awards.individualGrouping = 'classification')), mode: 'final' });
 		expect(perClass.individuals).toHaveLength(2);
 		const overall = computeStandings({
 			teams,
@@ -216,7 +219,8 @@ describe('computeStandings', () => {
 			mode: 'final'
 		});
 		expect(s.records.Y.wins).toBe(1);
-		expect(s.records.Y.totalPoints).toBe(3000);
+		// Tiebreaker points never count toward total points (rule confirmed Oct 21, 2026).
+		expect(s.records.Y.totalPoints).toBe(2000);
 		expect(s.records.X.losses).toBe(1);
 	});
 

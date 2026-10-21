@@ -43,7 +43,9 @@ export type EventBody =
 	| { type: 'correction'; action: 'amend'; target: string; replacement: ScoringBody; reason: string }
 	| { type: 'correction'; action: 'add'; replacement: ScoringBody; reason: string }
 	| { type: 'note'; text: string }
-	| { type: 'device_takeover'; previousDevice: string | null };
+	| { type: 'device_takeover'; previousDevice: string | null }
+	/** Head scorekeeper: `side` forfeits. The other team wins; neither team scores. Void it with a correction. */
+	| { type: 'forfeit'; side: Side; reason: string };
 
 export type EventType = EventBody['type'];
 
@@ -67,7 +69,10 @@ export interface ScoreEvent {
 export const SCORING_TYPES = new Set<EventType>(['tossup_answer', 'tossup_dead', 'bonus']);
 export const isScoringBody = (b: EventBody): b is ScoringBody => SCORING_TYPES.has(b.type);
 
-export type RoundStatus = 'not_started' | 'in_progress' | 'ended' | 'submitted' | 'approved';
+export type RoundStatus = 'not_started' | 'in_progress' | 'ended' | 'submitted' | 'approved' | 'forfeit';
+
+/** Approved rounds and forfeits are final: they count in final standings and allow finalizing. */
+export const isFinalStatus = (s: RoundStatus) => s === 'approved' || s === 'forfeit';
 
 export type FlagKind =
 	| 'fractional_bonus'
@@ -87,6 +92,8 @@ export type FlagKind =
 	| 'already_voided'
 	| 'invalid_event'
 	| 'tied_without_tiebreaker'
+	| 'tiebreaker_not_needed'
+	| 'forfeit_scoring_ignored'
 	| 'edited_after_submission'
 	| 'submitted_score_mismatch'
 	| 'below_min_tossups'

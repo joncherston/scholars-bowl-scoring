@@ -99,9 +99,11 @@ export interface RoundResult {
 	teams: Record<Side, TeamTotals>;
 	players: PlayerTotals[];
 	winner: Side | null;
-	/** Round scores are level and no tiebreaker has decided it. */
+	/** Regulation scores are level and no tiebreaker has decided it. */
 	tied: boolean;
 	decidedByTiebreaker: boolean;
+	/** An active forfeit: the other side wins and neither side scores. */
+	forfeit: { side: Side; reason: string; eventId: string } | null;
 	tiebreakerActive: boolean;
 	/** The tossup the scorer is on now. */
 	currentTossup: { number: number; tiebreaker: boolean };
@@ -199,6 +201,7 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 	let ended: { reason: string; note: string | null } | null = null;
 	let submitted: RoundResult['submitted'] = null;
 	let approvedSeq: number | null = null;
+	let forfeit: RoundResult['forfeit'] = null;
 	/** Latest scoring change or correction; an approval older than this no longer stands. */
 	let lastChangeSeq = -Infinity;
 	let lastChangeAfterSubmit = false;
@@ -243,6 +246,9 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 				break;
 			case 'unapproved':
 				approvedSeq = null;
+				break;
+			case 'forfeit':
+				forfeit = { side: b.side, reason: b.reason, eventId: e.id };
 				break;
 			case 'correction': {
 				lastChangeSeq = e.seq;
@@ -467,27 +473,42 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 		tossups.push(line);
 	}
 
-	// 4. Team and player totals.
+	// 4. Team and player totals. Regulation is everything except tiebreaker tossups. A tiebreaker
+	// only decides a round whose regulation score is level: if a later correction breaks the tie,
+	// regulation decides and the tiebreaker (and its points) is ignored.
+	const regulation: Record<Side, Hundredths> = { A: 0, B: 0 };
 	for (const s of ['A', 'B'] as const) {
 		const t = teams[s];
-		const base = t.tossupPoints + t.negPoints + t.bonusPoints + t.bouncebackPoints;
-		t.roundScore = base + (tbInRound ? t.tiebreakerPoints : 0);
-		t.totalPoints = base + (rules.tiebreaker.countsInTotalPoints ? t.tiebreakerPoints : 0);
+		regulation[s] = t.tossupPoints + t.negPoints + t.bonusPoints + t.bouncebackPoints;
+	}
+	const regulationTied = regulation.A === regulation.B;
+	const tbIgnored = !regulationTied && (tiebreakerActive || tossups.some((t) => t.tiebreaker));
+	if (tbIgnored) {
+		// Tiebreaker lines come last; they add nothing, so the running score stays at regulation.
+		for (const line of tossups.filter((l) => l.tiebreaker)) {
+			line.points = { A: 0, B: 0 };
+			line.running = { ...regulation };
+		}
+	}
+	for (const s of ['A', 'B'] as const) {
+		const t = teams[s];
+		const tb = tbIgnored ? 0 : t.tiebreakerPoints;
+		t.roundScore = regulation[s] + (tbInRound ? tb : 0);
+		t.totalPoints = regulation[s] + (rules.tiebreaker.countsInTotalPoints ? tb : 0);
 	}
 	for (const p of players.values()) {
 		p.individualTotal =
 			p.tossupPoints +
 			p.negPoints +
 			(rules.individual.includeBonus ? p.bonusPoints : 0) +
-			(rules.individual.includeTiebreaker ? p.tiebreakerPoints : 0);
+			(rules.individual.includeTiebreaker && !tbIgnored ? p.tiebreakerPoints : 0);
 	}
 
-	// 5. Winner: the first correct tiebreaker answer wins; otherwise the higher round score.
-	const tbWin = tossups.find((t) => t.tiebreaker && t.correctSide)?.correctSide ?? null;
-	let winner: Side | null = tbWin;
-	if (!winner && teams.A.roundScore !== teams.B.roundScore)
-		winner = teams.A.roundScore > teams.B.roundScore ? 'A' : 'B';
+	// 5. Winner: the higher regulation score; if regulation is level, the first correct tiebreaker answer.
+	const tbWin = regulationTied ? (tossups.find((t) => t.tiebreaker && t.correctSide)?.correctSide ?? null) : null;
+	const winner: Side | null = regulationTied ? tbWin : regulation.A > regulation.B ? 'A' : 'B';
 	const tied = winner === null;
+	if (tbIgnored) flags.push({ kind: 'tiebreaker_not_needed', message: 'Regulation is no longer tied; tiebreaker ignored' });
 
 	// 6. Status and round-level flags.
 	const approved = approvedSeq !== null && lastChangeSeq < approvedSeq;
@@ -538,6 +559,34 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 		return { event: e, active: !v, voidedBy: v ? (byId.get(v) ?? null) : null };
 	});
 
+	// A forfeit overrides the scoring: the other team wins, neither team scores, no player is
+	// credited with points or a game, and the round is final without a separate approval.
+	if (forfeit) {
+		const ignored = items.length;
+		const kept = flags.filter((f) => f.kind === 'unknown_target' || f.kind === 'already_voided' || f.kind === 'invalid_event');
+		if (ignored) kept.push({ kind: 'forfeit_scoring_ignored', message: `Forfeit recorded: ${ignored} scoring ${ignored === 1 ? 'entry' : 'entries'} in this round ignored` });
+		return {
+			status: 'forfeit',
+			lineups: { A: [], B: [] },
+			tossups: [],
+			teams: { A: emptyTeam(), B: emptyTeam() },
+			players: [],
+			winner: other(forfeit.side),
+			tied: false,
+			decidedByTiebreaker: false,
+			forfeit,
+			tiebreakerActive: false,
+			currentTossup: { number: 1, tiebreaker: false },
+			lastRegularTossup: 0,
+			endReason: ended?.reason ?? null,
+			endNote: ended?.note ?? null,
+			submitted,
+			flags: kept,
+			audit,
+			lastSeq: sorted.length ? sorted[sorted.length - 1].seq : 0
+		};
+	}
+
 	return {
 		status,
 		lineups,
@@ -547,6 +596,7 @@ export function computeRound(events: readonly ScoreEvent[], rules: RuleSettings)
 		winner,
 		tied,
 		decidedByTiebreaker: tbWin !== null,
+		forfeit: null,
 		tiebreakerActive: tiebreakerActive || tbLines.length > 0,
 		currentTossup,
 		lastRegularTossup,

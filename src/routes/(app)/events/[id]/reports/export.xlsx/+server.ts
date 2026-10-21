@@ -1,10 +1,11 @@
 import { describeEvent } from '$lib/describe';
+import { isFinalStatus } from '$lib/engine';
 import { formatPoints } from '$lib/engine/points';
 import { audit } from '$lib/server/audit';
 import { eventIdParam } from '$lib/server/events';
 import { requireEventRole } from '$lib/server/guard';
 import { computeLive } from '$lib/server/live';
-import { reportMode } from '$lib/server/reports';
+import { gameScore, groupStandings, reportMode } from '$lib/server/reports';
 import ExcelJS from 'exceljs';
 
 const sheetName = (s: string, used: Set<string>) => {
@@ -15,7 +16,7 @@ const sheetName = (s: string, used: Set<string>) => {
 	return name;
 };
 
-/** Everything in one workbook: team results per classification, individuals, games, and the raw log. */
+/** Everything in one workbook: team results per award division, individuals, games, and the raw log. */
 export async function GET({ params, locals }) {
 	const eventId = eventIdParam(params);
 	const user = requireEventRole(locals.auth, eventId, ['head_scorekeeper']);
@@ -37,49 +38,50 @@ export async function GET({ params, locals }) {
 		['Practice / test event', live.event.isTest ? 'YES' : 'no'],
 		['Exported', new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })],
 		[],
-		['Session', 'Status', 'Counting rounds approved', 'Counting rounds total']
+		['Session', 'Status', 'Counting rounds approved or forfeited', 'Counting rounds total']
 	]);
 	for (const s of live.sessions) {
 		const counting = live.matches.filter((m) => m.sessionId === s.id && m.counts);
-		summary.addRow([s.name, reportMode(live, s.id) === 'final' ? `Final (finalized by ${s.finalizedBy})` : 'PROVISIONAL', counting.filter((m) => m.result.status === 'approved').length, counting.length]);
+		summary.addRow([s.name, reportMode(live, s.id) === 'final' ? `Final (finalized by ${s.finalizedBy})` : 'PROVISIONAL', counting.filter((m) => isFinalStatus(m.result.status)).length, counting.length]);
 	}
 	summary.getColumn(1).width = 26;
 	summary.getColumn(2).width = 40;
 
-	for (const s of live.sessions) {
-		const st = reportMode(live, s.id) === 'final' ? live.final : live.provisional;
-		const sessMatches = live.matches.filter((m) => m.sessionId === s.id);
-		for (const g of st.classifications.filter((x) => x.sessionId === String(s.id))) {
-			const ws = wb.addWorksheet(sheetName(`${s.name} ${g.label}`, used));
-			const header = ['Place', 'Team', ...Array.from({ length: s.roundCount }, (_, i) => `Round ${i + 1}`), 'Wins', 'Losses', 'Points', 'Note'];
-			ws.addRow(header);
-			for (const r of g.rows) {
-				const cells = Array.from({ length: s.roundCount }, (_, i) => {
-					const m = sessMatches.find((x) => x.roundNo === i + 1 && (String(x.teamA) === r.teamId || String(x.teamB) === r.teamId));
-					if (!m) return 'bye';
-					const side = String(m.teamA) === r.teamId ? 'A' : 'B';
-					const opp = teamName(side === 'A' ? m.teamB : m.teamA);
-					if (m.result.status === 'not_started') return `vs ${opp}`;
-					const mine = m.result.teams[side].roundScore;
-					const theirs = m.result.teams[side === 'A' ? 'B' : 'A'].roundScore;
-					const wl = m.result.winner === side ? 'W' : m.result.winner ? 'L' : 'T';
-					return `${m.counts ? '' : 'NC '}${wl} ${formatPoints(mine)}–${formatPoints(theirs)} vs ${opp}${m.result.status === 'approved' ? '' : ` (${m.result.status})`}`;
-				});
-				ws.addRow([r.place, teamName(r.teamId), ...cells, r.record.wins, r.record.losses, Number(formatPoints(r.record.totalPoints)), [r.tied ? 'tied' : '', (r as { resolved?: string }).resolved ? `tie decided: ${(r as { resolved?: string }).resolved}` : '', g.soleTeam ? 'only team in classification' : ''].filter(Boolean).join('; ')]);
-			}
-			bold(ws);
-			ws.getColumn(2).width = 30;
-			for (let i = 3; i < 3 + s.roundCount; i++) ws.getColumn(i).width = 34;
+	const sessionNames = (ids: string[]) => ids.map((id) => live.sessions.find((s) => String(s.id) === id)?.name ?? '?').join(' + ');
+	// One sheet per award division; a team's points equal the sum of the scores in its counting games.
+	for (const pg of live.provisional.divisions) {
+		const { st } = groupStandings(live, pg.sessionIds);
+		const g = st.divisions.find((x) => x.key === pg.key) ?? pg;
+		const roundCount = Math.max(1, ...live.sessions.filter((s) => g.sessionIds.includes(String(s.id))).map((s) => s.roundCount));
+		const ws = wb.addWorksheet(sheetName(`${sessionNames(g.sessionIds)} ${g.label}`, used));
+		ws.addRow(['Place', 'Team', 'Classification', ...Array.from({ length: roundCount }, (_, i) => `Round ${i + 1}`), 'Wins', 'Losses', 'Points', 'Note']);
+		for (const r of g.rows) {
+			const t = live.teams.find((x) => x.id === r.teamId);
+			const cells = Array.from({ length: roundCount }, (_, i) => {
+				const m = live.matches.find((x) => String(x.sessionId) === t?.sessionId && x.roundNo === i + 1 && (String(x.teamA) === r.teamId || String(x.teamB) === r.teamId));
+				if (!m) return 'bye';
+				const side = String(m.teamA) === r.teamId ? 'A' : 'B';
+				const opp = teamName(side === 'A' ? m.teamB : m.teamA);
+				if (m.result.status === 'not_started') return `vs ${opp}`;
+				const sc = gameScore(m.result, side);
+				if (sc.text) return `${m.counts ? '' : 'NC '}${sc.text} vs ${opp}`;
+				const wl = m.result.winner === side ? 'W' : m.result.winner ? 'L' : 'T';
+				return `${m.counts ? '' : 'NC '}${wl} ${formatPoints(sc.mine)}–${formatPoints(sc.theirs)} vs ${opp}${sc.note ? ` (${sc.note})` : ''}${m.result.status === 'approved' ? '' : ` (${m.result.status})`}`;
+			});
+			const resolved = (r as { resolved?: string }).resolved;
+			ws.addRow([r.place, teamName(r.teamId), t?.classification ?? '', ...cells, r.record.wins, r.record.losses, Number(formatPoints(r.record.totalPoints)), [r.tied ? 'tied' : '', resolved ? `tie decided: ${resolved}` : '', g.soleTeam ? 'only team in division' : '', t?.withdrawn ? 'withdrawn' : ''].filter(Boolean).join('; ')]);
 		}
+		bold(ws);
+		ws.getColumn(2).width = 30;
+		for (let i = 4; i < 4 + roundCount; i++) ws.getColumn(i).width = 34;
 	}
 
 	const ind = wb.addWorksheet(sheetName('Individuals', used));
 	ind.addRow(['Session', 'Group', 'Place', 'Player', 'Team', 'Games', 'Tossups correct', 'Negs', 'Tossup points', 'Individual total', 'Tied']);
-	for (const s of live.sessions) {
-		const st = reportMode(live, s.id) === 'final' ? live.final : live.provisional;
-		for (const g of st.individuals.filter((x) => x.sessionId === String(s.id) || x.sessionId === null))
-			for (const r of g.rows)
-				ind.addRow([s.name, g.label, r.place, live.playerNames[r.playerId] ?? 'Unknown', teamName(r.teamId), r.games, r.corrects, r.negs, Number(formatPoints(r.tossupPoints)), Number(formatPoints(r.total)), r.tied ? 'yes' : '']);
+	for (const pg of live.provisional.individuals) {
+		const g = groupStandings(live, pg.sessionIds).st.individuals.find((x) => x.key === pg.key) ?? pg;
+		for (const r of g.rows)
+			ind.addRow([sessionNames(g.sessionIds), g.label, r.place, live.playerNames[r.playerId] ?? 'Unknown', teamName(r.teamId), r.games, r.corrects, r.negs, Number(formatPoints(r.tossupPoints)), Number(formatPoints(r.total)), r.tied ? 'yes' : '']);
 	}
 	bold(ind);
 	ind.getColumn(4).width = 26;
@@ -97,8 +99,8 @@ export async function GET({ params, locals }) {
 			teamName(m.teamB),
 			m.counts ? 'yes' : 'non-counter',
 			m.result.status,
-			Number(formatPoints(m.result.teams.A.roundScore)),
-			Number(formatPoints(m.result.teams.B.roundScore)),
+			Number(formatPoints(gameScore(m.result, 'A').mine)),
+			Number(formatPoints(gameScore(m.result, 'B').mine)),
 			m.result.winner ? teamName(m.result.winner === 'A' ? m.teamA : m.teamB) : '',
 			m.result.decidedByTiebreaker ? 'yes' : '',
 			m.result.endReason ?? '',

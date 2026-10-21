@@ -63,7 +63,8 @@ const CONFIRM_FIELDS: Record<ConfirmKey, (r: RuleSettings) => unknown> = {
 	individual: (r) => [r.individual.includeBonus],
 	tiebreaker: (r) => [r.tiebreaker, r.individual.includeTiebreaker],
 	round: (r) => [r.round.timeLimitMinutes, r.round.minTossups, r.round.maxTossups],
-	teamAwards: (r) => [r.awards.teamPlaces, r.awards.perSession],
+	teamAwards: (r) => [r.awards.teamPlaces],
+	divisions: (r) => [r.awards.divisions],
 	individualAwards: (r) => [r.awards.individualGrouping, r.awards.individualPlaces],
 	individualTies: () => 'flag'
 };

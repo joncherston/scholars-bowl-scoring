@@ -43,5 +43,7 @@ export function describeEvent(b: EventBody, nameOf: (id: string | null) => strin
 			return `Note: ${b.text}`;
 		case 'device_takeover':
 			return 'Scoring moved to another computer (takeover)';
+		case 'forfeit':
+			return `Forfeit: ${teams[b.side]} (${b.side}) forfeits. Reason: ${b.reason}`;
 	}
 }

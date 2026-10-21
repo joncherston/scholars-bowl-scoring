@@ -16,7 +16,7 @@ test('imports the website registration CSV with a preview, then re-imports a new
 	await page.getByRole('button', { name: 'Create event' }).click();
 	await page.waitForURL(/\/events\/\d+$/);
 	const eventId = Number(/\/events\/(\d+)$/.exec(page.url())![1]);
-	await expect(page.getByText('8 to confirm before event')).toBeVisible();
+	await expect(page.getByText('9 to confirm before event')).toBeVisible();
 
 	// Upload the export; nothing changes until the preview is approved.
 	await page.goto(`/events/${eventId}/teams/import`);

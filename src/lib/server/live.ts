@@ -1,6 +1,7 @@
 import {
 	computeRound,
 	computeStandings,
+	isFinalStatus,
 	summarizeRound,
 	type MatchOutcome,
 	type RoundResult,
@@ -45,7 +46,7 @@ export interface LiveFlag {
 type Resolution = typeof schema.tieResolutions.$inferSelect;
 type ResolvedStandings = Standings & {
 	flags: (Standings['flags'][number] & { resolved?: string })[];
-	classifications: (Standings['classifications'][number] & { rows: (Standings['classifications'][number]['rows'][number] & { resolved?: string })[] })[];
+	divisions: (Standings['divisions'][number] & { rows: (Standings['divisions'][number]['rows'][number] & { resolved?: string })[] })[];
 	individuals: (Standings['individuals'][number] & { rows: (Standings['individuals'][number]['rows'][number] & { resolved?: string })[] })[];
 };
 
@@ -68,7 +69,7 @@ function applyResolutions(st: Standings, resolutions: Resolution[]): ResolvedSta
 		}
 		rows.sort((a, b) => a.place - b.place);
 	};
-	for (const g of out.classifications) reorder(g.rows, (r) => r.teamId, 'team', g.key);
+	for (const g of out.divisions) reorder(g.rows, (r) => r.teamId, 'team', g.key);
 	for (const g of out.individuals) reorder(g.rows, (r) => r.playerId, 'individual', g.key);
 	for (const f of out.flags) {
 		const ids = f.teamIds ?? f.playerIds;
@@ -80,19 +81,25 @@ function applyResolutions(st: Standings, resolutions: Resolution[]): ResolvedSta
 	return out;
 }
 
-/** Everything the dashboard, reports, and public page need, computed from the event logs. */
+/**
+ * Everything the dashboard, reports, and public page need, computed from the event logs.
+ * Standings always cover the whole event, because an award division can span sessions;
+ * `sessionIds` limits the games, groups, and flags returned to those sessions.
+ */
 export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {}) {
 	const db = getDb();
 	const event = getEvent(eventId);
 	const rules: RuleSettings = currentRuleVersion(eventId).settings;
-	const sessions = listSessions(eventId).filter((s) => !opts.sessionIds || opts.sessionIds.includes(s.id));
+	const allSessions = listSessions(eventId);
+	const sessions = allSessions.filter((s) => !opts.sessionIds || opts.sessionIds.includes(s.id));
 	const sessionIds = sessions.map((s) => s.id);
+	const allSessionIds = allSessions.map((s) => s.id);
 	const rooms = listRooms(eventId, true);
 	const teamRows = listTeams(eventId);
-	const poolsBySession = new Map(sessionIds.map((id) => [id, sessionPools(id)]));
+	const poolsBySession = new Map(allSessionIds.map((id) => [id, sessionPools(id)]));
 
 	const teams: (TeamInfo & { schoolName: string; schoolDisplayName: string; withdrawn: boolean })[] = teamRows
-		.filter((t) => t.sessionId && sessionIds.includes(t.sessionId))
+		.filter((t) => t.sessionId && allSessionIds.includes(t.sessionId))
 		.map((t) => {
 			const pools = poolsBySession.get(t.sessionId!) ?? [];
 			const pool = pools.find((p) => p.classifications.includes(t.classification));
@@ -104,23 +111,25 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 				sessionId: String(t.sessionId),
 				poolId: pool ? String(pool.id) : null,
 				poolName: poolLabel(pools, t.classification),
-				sessionName: sessions.find((s) => s.id === t.sessionId)?.name,
+				sessionName: allSessions.find((s) => s.id === t.sessionId)?.name,
 				schoolName: t.schoolName,
 				schoolDisplayName: t.schoolDisplayName,
 				withdrawn: t.withdrawn
 			};
 		});
 
-	const matchRows = sessionIds.length
-		? db.select().from(schema.matches).where(inArray(schema.matches.sessionId, sessionIds)).orderBy(asc(schema.matches.roundNo)).all()
+	const matchRows = allSessionIds.length
+		? db.select().from(schema.matches).where(inArray(schema.matches.sessionId, allSessionIds)).orderBy(asc(schema.matches.roundNo)).all()
 		: [];
-	const rejectedRows = matchRows.length
-		? db.select({ matchId: schema.rejectedEvents.matchId }).from(schema.rejectedEvents).where(inArray(schema.rejectedEvents.matchId, matchRows.map((m) => m.id))).all()
+	const shownIds = matchRows.filter((m) => sessionIds.includes(m.sessionId)).map((m) => m.id);
+	const rejectedRows = shownIds.length
+		? db.select({ matchId: schema.rejectedEvents.matchId }).from(schema.rejectedEvents).where(inArray(schema.rejectedEvents.matchId, shownIds)).all()
 		: [];
 
-	const matches: LiveMatch[] = matchRows.map((m) => {
+	const allMatches: LiveMatch[] = matchRows.map((m) => {
 		const events = matchEvents(m.id);
 		const rv = rulesForMatch(m, eventId);
+		const shown = shownIds.includes(m.id);
 		return {
 			id: m.id,
 			sessionId: m.sessionId,
@@ -133,25 +142,54 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 			ruleVersion: m.ruleVersionId ? rv.version : null,
 			result: computeRound(events, rv.settings),
 			lastEventAt: events.length ? (events[events.length - 1].serverTs ?? null) : null,
-			gaps: events.length ? deviceGaps(m.id) : [],
+			gaps: shown && events.length ? deviceGaps(m.id) : [],
 			rejected: rejectedRows.filter((r) => r.matchId === m.id).length
 		};
 	});
+	const matches = allMatches.filter((m) => shownIds.includes(m.id));
 
 	const outcomes: Record<string, MatchOutcome> = {};
-	for (const m of matches) outcomes[String(m.id)] = summarizeRound(m.result);
+	for (const m of allMatches) outcomes[String(m.id)] = summarizeRound(m.result);
+	// A withdrawn team stays in the standings once it has a counting game played or forfeited.
+	const hasCountingResult = (teamId: string) =>
+		allMatches.some((m) => m.counts && (String(m.teamA) === teamId || String(m.teamB) === teamId) && (m.result.status === 'submitted' || isFinalStatus(m.result.status)));
 	const standingInput = {
-		teams: teams.filter((t) => !t.withdrawn),
-		matches: matches.map((m) => ({ id: String(m.id), sessionId: String(m.sessionId), roundNo: m.roundNo, teamA: String(m.teamA), teamB: String(m.teamB), counts: m.counts })),
+		teams: teams.filter((t) => !t.withdrawn || hasCountingResult(t.id)),
+		matches: allMatches.map((m) => ({ id: String(m.id), sessionId: String(m.sessionId), roundNo: m.roundNo, teamA: String(m.teamA), teamB: String(m.teamB), counts: m.counts })),
 		outcomes,
 		rules
 	};
 	const resolutions = db.select().from(schema.tieResolutions).where(eq(schema.tieResolutions.eventId, eventId)).all().filter((r) => r.active);
-	const provisional = applyResolutions(computeStandings({ ...standingInput, mode: 'provisional' }), resolutions);
-	const final = applyResolutions(computeStandings({ ...standingInput, mode: 'final' }), resolutions);
+	// Divisions in the event's classification order (by their first classification).
+	const classOrder = (teamId: string) => {
+		const i = event.classifications.indexOf(teams.find((t) => t.id === teamId)?.classification ?? '');
+		return i < 0 ? event.classifications.length : i;
+	};
+	const groupOrder = (rows: { teamId: string }[]) => Math.min(event.classifications.length, ...rows.map((r) => classOrder(r.teamId)));
+	const selected = new Set(sessionIds.map(String));
+	const shownMatchIds = new Set(matches.map((m) => String(m.id)));
+	const forView = (st: Standings): Standings => {
+		const sortGroups = <G extends { rows: { teamId: string }[] }>(gs: G[]) => [...gs].sort((a, b) => groupOrder(a.rows) - groupOrder(b.rows));
+		const out = { ...st, divisions: sortGroups(st.divisions), individuals: sortGroups(st.individuals) };
+		if (!opts.sessionIds) return out;
+		const inView = (g: { sessionIds: string[] }) => g.sessionIds.some((id) => selected.has(id));
+		const view = {
+			...out,
+			pools: out.pools.filter(inView),
+			classifications: out.classifications.filter(inView),
+			divisions: out.divisions.filter(inView),
+			individuals: out.individuals.filter(inView),
+			pendingMatchIds: out.pendingMatchIds.filter((id) => shownMatchIds.has(id))
+		};
+		const keys = new Set([...view.pools, ...view.classifications, ...view.divisions, ...view.individuals].map((g) => g.key));
+		view.flags = out.flags.filter((f) => (f.groupKey ? keys.has(f.groupKey) : f.matchId ? shownMatchIds.has(f.matchId) : true));
+		return view;
+	};
+	const provisional = applyResolutions(forView(computeStandings({ ...standingInput, mode: 'provisional' })), resolutions);
+	const final = applyResolutions(forView(computeStandings({ ...standingInput, mode: 'final' })), resolutions);
 
 	// Player names for staff views.
-	const playerIds = [...new Set(matches.flatMap((m) => [...m.result.lineups.A, ...m.result.lineups.B, ...m.result.players.map((p) => p.playerId)]))];
+	const playerIds = [...new Set(allMatches.flatMap((m) => [...m.result.lineups.A, ...m.result.lineups.B, ...m.result.players.map((p) => p.playerId)]))];
 	const playerRows = playerIds.length ? db.select().from(schema.players).where(inArray(schema.players.id, playerIds)).all() : [];
 	const playerNames: Record<string, string> = Object.fromEntries(playerRows.map((p) => [p.id, playerDisplayName(p)]));
 
@@ -169,7 +207,7 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 			const level: LiveFlag['level'] = ['fractional_bonus', 'inexact_bonus', 'below_min_tossups'].includes(f.kind) ? 'info' : f.kind === 'edited_after_submission' || f.kind === 'submitted_score_mismatch' ? 'warning' : 'warning';
 			flags.push({ level, kind: f.kind, message: `${label(m)}: ${f.message}`, matchId: m.id, sessionId: m.sessionId });
 		}
-		if (m.counts && r.status !== 'submitted' && r.status !== 'approved' && m.roundNo < (latestStarted.get(roomKey(m)) ?? 0))
+		if (m.counts && r.status !== 'submitted' && !isFinalStatus(r.status) && m.roundNo < (latestStarted.get(roomKey(m)) ?? 0))
 			flags.push({ level: 'warning', kind: 'not_submitted', message: `${label(m)}: not submitted yet, but this room has started a later round`, matchId: m.id, sessionId: m.sessionId });
 		if (m.gaps.length) flags.push({ level: 'error', kind: 'sequence_gap', message: `${label(m)}: some actions from a scoring device never arrived (${m.gaps.map((g) => g.missing.length).reduce((a, b) => a + b, 0)} missing). Ask for that computer's results file.`, matchId: m.id, sessionId: m.sessionId });
 		if (m.rejected) flags.push({ level: 'warning', kind: 'rejected_events', message: `${label(m)}: ${m.rejected} action(s) were rejected (see the round's audit)`, matchId: m.id, sessionId: m.sessionId });
@@ -178,7 +216,7 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 	const teamOfPlayer = new Map<string, string>();
 	for (const g of provisional.individuals) for (const r of g.rows) teamOfPlayer.set(r.playerId, r.teamId);
 	const settled = (teamIds: string[]) =>
-		matches.filter((m) => m.counts && (teamIds.includes(String(m.teamA)) || teamIds.includes(String(m.teamB)))).every((m) => m.result.status === 'approved');
+		allMatches.filter((m) => m.counts && (teamIds.includes(String(m.teamA)) || teamIds.includes(String(m.teamB)))).every((m) => isFinalStatus(m.result.status));
 	const played = (teamIds: string[]) => teamIds.some((id) => (provisional.records[id]?.played ?? 0) > 0);
 	for (const f of provisional.flags) {
 		if (f.kind === 'fractional_points' || f.kind === 'unresolved_round_tie') continue; // already flagged per round
@@ -190,16 +228,37 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 				continue;
 			}
 		}
+		const isTie = f.kind === 'team_tie' || f.kind === 'individual_tie';
 		if (f.resolved) flags.push({ level: 'info', kind: `${f.kind}_resolved`, message: `${f.message} — resolved: ${f.resolved}` });
-		else flags.push({ level: f.kind === 'team_tie' || f.kind === 'individual_tie' ? 'error' : 'info', kind: f.kind, message: f.message, tie: f.kind === 'team_tie' || f.kind === 'individual_tie' ? { kind: f.kind === 'team_tie' ? 'team' : 'individual', groupKey: f.groupKey!, ids: (f.teamIds ?? f.playerIds)! } : undefined });
+		else
+			flags.push({
+				level: isTie ? 'error' : f.kind === 'division_spans_sessions' ? 'warning' : 'info',
+				kind: f.kind,
+				message: f.message,
+				tie: isTie ? { kind: f.kind === 'team_tie' ? 'team' : 'individual', groupKey: f.groupKey!, ids: (f.teamIds ?? f.playerIds)! } : undefined
+			});
 	}
+	// Schedule problems in games that are already final (approved or forfeited) can no longer be acted on.
+	const finalIds = new Set(matches.filter((m) => isFinalStatus(m.result.status)).map((m) => m.id));
 	for (const s of sessions) {
 		const sched = loadSchedule(eventId, s.id);
 		const issues: Issue[] = validateSchedule({ teams: sched.teams, rooms: sched.rooms, roundCount: s.roundCount, matches: sched.matches });
-		for (const i of issues.filter((x) => x.level !== 'notice'))
+		for (const i of issues.filter((x) => x.level !== 'notice' && !(x.matchIds?.length && x.matchIds.every((id) => finalIds.has(id)))))
 			flags.push({ level: i.level === 'error' ? 'error' : 'info', kind: 'schedule', message: `${s.name} schedule: ${i.message}`, sessionId: s.id });
 		if (!sched.matches.length) flags.push({ level: 'info', kind: 'schedule', message: `${s.name}: no games scheduled`, sessionId: s.id });
 	}
+
+	// Withdrawn teams' counting games that haven't started, for "Record forfeits for all remaining games".
+	const withdrawn = teams
+		.filter((t) => t.withdrawn && selected.has(t.sessionId))
+		.map((t) => ({
+			teamId: t.id,
+			name: t.name,
+			games: matches
+				.filter((m) => m.counts && m.result.status === 'not_started' && (String(m.teamA) === t.id || String(m.teamB) === t.id))
+				.map((m) => ({ matchId: m.id, roundNo: m.roundNo, roomName: m.roomName, opponent: teamName(String(m.teamA) === t.id ? m.teamB : m.teamA) }))
+		}))
+		.filter((t) => t.games.length);
 
 	return {
 		event,
@@ -211,7 +270,8 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 		provisional,
 		final,
 		playerNames,
-		flags
+		flags,
+		withdrawn
 	};
 }
 

@@ -20,7 +20,7 @@ export function load({ params }) {
 
 class FormError extends Error {}
 
-function parseSettings(f: FormData, base: RuleSettings): RuleSettings {
+function parseSettings(f: FormData, base: RuleSettings, classifications: string[]): RuleSettings {
 	const r = structuredClone(base);
 	const pts = (name: string, allowZero = true) => {
 		const v = parsePoints(String(f.get(name) ?? ''));
@@ -68,11 +68,17 @@ function parseSettings(f: FormData, base: RuleSettings): RuleSettings {
 	if (new Set(order).size !== 3 || !order.every((o) => ['roundsWon', 'totalPoints', 'headToHead'].includes(o)))
 		throw new FormError('Each standings tie-breaker must be used once.');
 	r.standings = { order };
+	const divisions = { ...base.awards.divisions };
+	for (const c of classifications) {
+		const name = String(f.get(`division:${c}`) ?? '').trim();
+		if (!name || name.length > 60) throw new FormError(`Give ${c} an award division name (up to 60 characters).`);
+		divisions[c] = name;
+	}
 	r.awards = {
 		teamPlaces: int('teamPlaces', 1, 10),
 		individualPlaces: int('individualPlaces', 0, 20),
-		individualGrouping: (['classification', 'session', 'overall'] as const).find((x) => x === f.get('individualGrouping')) ?? 'classification',
-		perSession: on('perSession')
+		individualGrouping: (['division', 'classification', 'session', 'overall'] as const).find((x) => x === f.get('individualGrouping')) ?? 'division',
+		divisions
 	};
 	r.maxRoundsPerSession = int('maxRoundsPerSession', 1, 30);
 	return normalizeRules(r);
@@ -85,7 +91,7 @@ export const actions = {
 		const f = await request.formData();
 		let settings: RuleSettings;
 		try {
-			settings = parseSettings(f, currentRuleVersion(id).settings);
+			settings = parseSettings(f, currentRuleVersion(id).settings, getEvent(id).classifications);
 		} catch (e) {
 			if (e instanceof FormError) return fail(400, { error: e.message });
 			throw e;

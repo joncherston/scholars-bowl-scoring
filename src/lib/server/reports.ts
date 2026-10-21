@@ -1,4 +1,4 @@
-import { computeRound } from '$lib/engine';
+import { computeRound, isFinalStatus, type RoundResult, type Side } from '$lib/engine';
 import { formatPoints } from '$lib/engine/points';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from './db';
@@ -17,32 +17,60 @@ export function reportMode(live: Live, sessionId: number): Mode {
 
 const ordinal = (n: number) => `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10] ?? 'th'}`;
 
+/**
+ * Standings for an award group: final only when every session it covers is finalized
+ * (a division can span sessions). Also names the sessions when it spans more than one.
+ */
+export function groupStandings(live: Live, sessionIds: string[]) {
+	const all = listSessions(live.event.id);
+	const mode: Mode = sessionIds.every((id) => all.find((s) => String(s.id) === id)?.finalizedAt) ? 'final' : 'provisional';
+	const spans = sessionIds.length > 1 ? sessionIds.map((id) => all.find((s) => String(s.id) === id)?.name ?? '?').join(' and ') : null;
+	return { mode, st: mode === 'final' ? live.final : live.provisional, spans };
+}
+
+/**
+ * The score a team is credited with for a game: its counted points (regulation; tiebreaker
+ * points never count), so a team's total points equal the sum of the scores shown.
+ */
+export function gameScore(result: RoundResult, side: Side) {
+	const them: Side = side === 'A' ? 'B' : 'A';
+	if (result.forfeit) return { text: result.winner === side ? 'W forfeit' : 'L forfeit', mine: 0, theirs: 0, note: result.forfeit.side === side ? 'forfeited' : 'won by forfeit' };
+	const note = result.decidedByTiebreaker ? (result.winner === side ? 'won in tiebreaker' : 'lost in tiebreaker') : '';
+	return { text: null, mine: result.teams[side].totalPoints, theirs: result.teams[them].totalPoints, note };
+}
+
 export function awardsData(eventId: number, sessionIds?: number[]) {
 	const live = computeLive(eventId, { sessionIds });
-	const teamName = (id: string) => live.teams.find((t) => t.id === id)?.name ?? '?';
+	const team = (id: string) => live.teams.find((t) => t.id === id);
+	const teamName = (id: string) => team(id)?.name ?? '?';
 	const sessions = live.sessions.map((s) => {
 		const mode = reportMode(live, s.id);
-		const st = mode === 'final' ? live.final : live.provisional;
-		const classes = st.classifications
-			.filter((g) => g.sessionId === String(s.id))
-			.sort((a, b) => live.event.classifications.indexOf(a.label) - live.event.classifications.indexOf(b.label))
-			.map((g) => ({
+		const inSession = (g: { sessionIds: string[] }) => g.sessionIds.includes(String(s.id));
+		const divisions = live.provisional.divisions.filter(inSession).map((pg) => {
+			const { mode: gmode, st, spans } = groupStandings(live, pg.sessionIds);
+			const g = st.divisions.find((x) => x.key === pg.key) ?? pg;
+			return {
 				label: g.label,
 				soleTeam: g.soleTeam,
+				spans,
+				provisional: gmode !== 'final',
 				places: g.rows
 					.filter((r) => r.place <= live.rules.awards.teamPlaces)
 					.map((r) => ({
 						place: r.place,
 						placeLabel: ordinal(r.place),
 						team: teamName(r.teamId),
+						classification: team(r.teamId)?.classification ?? '',
 						record: `${r.record.wins}–${r.record.losses}`,
 						points: formatPoints(r.record.totalPoints),
 						tied: r.tied,
 						resolved: (r as { resolved?: string }).resolved ?? null
 					}))
-			}));
-		const individuals = st.individuals
-			.filter((g) => g.sessionId === String(s.id) || g.sessionId === null)
+			};
+		});
+		const individuals = live.provisional.individuals
+			.filter(inSession)
+			.map((pg) => groupStandings(live, pg.sessionIds).st.individuals.find((x) => x.key === pg.key) ?? pg)
 			.map((g) => ({
 				label: g.label,
 				places: g.rows
@@ -58,8 +86,8 @@ export function awardsData(eventId: number, sessionIds?: number[]) {
 					}))
 			}));
 		const openTies = live.flags.filter((f) => f.tie).length;
-		const unapproved = live.matches.filter((m) => m.sessionId === s.id && m.counts && m.result.status !== 'approved').length;
-		return { id: s.id, name: s.name, date: s.date, mode, finalizedBy: s.finalizedBy, classes, individuals, openTies, unapproved };
+		const unapproved = live.matches.filter((m) => m.sessionId === s.id && m.counts && !isFinalStatus(m.result.status)).length;
+		return { id: s.id, name: s.name, date: s.date, mode, finalizedBy: s.finalizedBy, divisions, individuals, openTies, unapproved };
 	});
 	return { event: live.event, rules: live.rules, sessions };
 }
@@ -70,9 +98,10 @@ export function resultsData(eventId: number, sessionId: number) {
 	const st = mode === 'final' ? live.final : live.provisional;
 	const teamName = (id: string | number) => live.teams.find((t) => t.id === String(id))?.name ?? '?';
 	const session = live.sessions[0];
-	const fmtRow = (r: (typeof st.classifications)[number]['rows'][number]) => ({
+	const fmtRow = (r: (typeof st.divisions)[number]['rows'][number]) => ({
 		place: r.place,
 		team: teamName(r.teamId),
+		classification: live.teams.find((t) => t.id === r.teamId)?.classification ?? '',
 		wins: r.record.wins,
 		losses: r.record.losses,
 		ties: r.record.ties,
@@ -86,7 +115,11 @@ export function resultsData(eventId: number, sessionId: number) {
 		event: live.event,
 		session,
 		mode,
-		classifications: st.classifications.map((g) => ({ label: g.label, soleTeam: g.soleTeam, rows: g.rows.map(fmtRow) })),
+		divisions: live.provisional.divisions.map((pg) => {
+			const { mode: gmode, st: gst, spans } = groupStandings(live, pg.sessionIds);
+			const g = gst.divisions.find((x) => x.key === pg.key) ?? pg;
+			return { label: g.label, soleTeam: g.soleTeam, spans, provisional: gmode !== 'final', rows: g.rows.map(fmtRow) };
+		}),
 		pools: st.pools.map((g) => ({ label: g.label, rows: g.rows.map(fmtRow) })),
 		matches: live.matches
 			.sort((a, b) => a.roundNo - b.roundNo || a.roomName.localeCompare(b.roomName, undefined, { numeric: true }))
@@ -98,12 +131,16 @@ export function resultsData(eventId: number, sessionId: number) {
 				teamB: teamName(m.teamB),
 				counts: m.counts,
 				status: m.result.status,
-				scoreA: formatPoints(m.result.teams.A.roundScore),
-				scoreB: formatPoints(m.result.teams.B.roundScore),
+				scoreA: formatPoints(gameScore(m.result, 'A').mine),
+				scoreB: formatPoints(gameScore(m.result, 'B').mine),
 				winner: m.result.winner ? teamName(m.result.winner === 'A' ? m.teamA : m.teamB) : null,
-				tiebreaker: m.result.decidedByTiebreaker
+				note: m.result.forfeit
+					? `${teamName(m.result.forfeit.side === 'A' ? m.teamA : m.teamB)} forfeited`
+					: m.result.decidedByTiebreaker
+						? `${teamName(m.result.winner === 'A' ? m.teamA : m.teamB)} won in tiebreaker`
+						: ''
 			})),
-		individuals: st.individuals.map((g) => ({
+		individuals: live.provisional.individuals.map((pg) => groupStandings(live, pg.sessionIds).st.individuals.find((x) => x.key === pg.key) ?? pg).map((g) => ({
 			label: g.label,
 			rows: g.rows.map((r) => ({
 				place: r.place,

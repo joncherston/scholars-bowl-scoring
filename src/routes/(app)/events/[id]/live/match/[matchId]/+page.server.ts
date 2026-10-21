@@ -136,6 +136,17 @@ export const actions = {
 		const r = staffEvent(user, eventId, Number(params.matchId), body);
 		return r.status === 'accepted' ? { message: target ? 'Entry corrected.' : 'Entry added.' } : fail(400, { error: `Not saved (${r.reason}).` });
 	},
+	forfeit: async ({ request, locals, params }) => {
+		const eventId = eventIdParam(params);
+		const user = requireEventRole(locals.auth, eventId, ['head_scorekeeper']);
+		const f = await request.formData();
+		const side = String(f.get('side'));
+		const reason = reasonOf(f);
+		if (side !== 'A' && side !== 'B') return fail(400, { error: 'Choose the team that forfeits.' });
+		if (!reason) return fail(400, { error: 'A reason is required.' });
+		const r = staffEvent(user, eventId, Number(params.matchId), { type: 'forfeit', side, reason });
+		return r.status === 'accepted' ? { message: 'Forfeit recorded.' } : fail(400, { error: `Not saved (${r.reason}).` });
+	},
 	note: async ({ request, locals, params }) => {
 		const eventId = eventIdParam(params);
 		const user = requireEventRole(locals.auth, eventId, ['head_scorekeeper']);

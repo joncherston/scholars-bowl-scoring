@@ -63,9 +63,9 @@
 								{#each rd.games as g (g.id)}
 									<tr>
 										<td class:win={g.winner === 'A'}>{g.teamA}</td>
-										<td class="num nowrap">{g.state === 'upcoming' ? '—' : `${g.scoreA}–${g.scoreB}`}</td>
+										<td class="num nowrap">{g.state === 'upcoming' ? '—' : g.note === 'forfeit' ? 'forfeit' : `${g.scoreA}–${g.scoreB}`}</td>
 										<td class:win={g.winner === 'B'}>{g.teamB}</td>
-										<td class="small">{g.state === 'live' ? 'in progress' : g.state === 'upcoming' ? 'upcoming' : ''}{g.counts ? '' : ' non-counter'}</td>
+										<td class="small">{g.state === 'live' ? 'in progress' : g.state === 'upcoming' ? 'upcoming' : g.note === 'tiebreaker' ? 'won in tiebreaker' : ''}{g.counts ? '' : ' non-counter'}</td>
 									</tr>
 								{/each}
 							</tbody>

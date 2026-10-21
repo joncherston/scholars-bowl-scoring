@@ -1,4 +1,4 @@
-import { computeRound } from '$lib/engine';
+import { computeRound, isFinalStatus } from '$lib/engine';
 import { audit } from '$lib/server/audit';
 import { publish } from '$lib/server/bus';
 import { getDb, schema } from '$lib/server/db';
@@ -11,7 +11,7 @@ import { sessionRooms } from '$lib/server/schedule';
 import { simulationStatus, startSimulation, stopSimulation } from '$lib/server/simulate';
 import { staffEvent } from '$lib/server/staff-actions';
 import { fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 export function load({ locals, params, url, depends }) {
 	depends('app:live');
@@ -53,10 +53,11 @@ export function load({ locals, params, url, depends }) {
 		// Fractional-bonus notes are informational; they don't need checking.
 		flagCount: m.result.flags.filter((f) => f.kind !== 'fractional_bonus' && f.kind !== 'inexact_bonus').length + m.gaps.length + (m.rejected ? 1 : 0)
 	}));
-	const toRows = (g: (typeof live.provisional.classifications)[number]) => ({
+	const toRows = (g: (typeof live.provisional.divisions)[number]) => ({
 		key: g.key,
 		label: g.label,
 		soleTeam: g.soleTeam,
+		spansSessions: g.sessionIds.length > 1,
 		rows: g.rows.map((r) => ({
 			teamId: r.teamId,
 			name: teamName(r.teamId),
@@ -76,7 +77,7 @@ export function load({ locals, params, url, depends }) {
 		rooms,
 		matches,
 		roundCount: session.roundCount,
-		classStandings: live.provisional.classifications.map(toRows),
+		divisionStandings: live.provisional.divisions.map(toRows),
 		poolStandings: live.provisional.pools.map((g) => toRows(g as never)),
 		individuals: live.provisional.individuals.map((g) => ({
 			key: g.key,
@@ -97,7 +98,8 @@ export function load({ locals, params, url, depends }) {
 		individualPlaces: live.rules.awards.individualPlaces,
 		teamPlaces: live.rules.awards.teamPlaces,
 		pendingCounting: live.provisional.pendingMatchIds.length,
-		unapprovedCounting: live.matches.filter((m) => m.counts && m.result.status !== 'approved').length,
+		unapprovedCounting: live.matches.filter((m) => m.counts && !isFinalStatus(m.result.status)).length,
+		withdrawn: live.withdrawn,
 		simulation: simulationStatus(sessionId),
 		teamNames: Object.fromEntries(live.teams.map((t) => [t.id, t.name])),
 		playerNames: live.playerNames
@@ -124,7 +126,7 @@ export const actions = {
 		const f = await request.formData();
 		const sessionId = Number(f.get('sessionId'));
 		const live = computeLive(eventId, { sessionIds: [sessionId] });
-		const notApproved = live.matches.filter((m) => m.counts && m.result.status !== 'approved');
+		const notApproved = live.matches.filter((m) => m.counts && !isFinalStatus(m.result.status));
 		if (notApproved.length) return fail(400, { error: `${notApproved.length} counting round(s) are not approved yet.` });
 		const openTies = live.flags.filter((x) => x.tie);
 		if (openTies.length) return fail(400, { error: 'Resolve the ties at award places before finalizing.' });
@@ -169,6 +171,24 @@ export const actions = {
 		stopSimulation(sessionId);
 		audit(`user:${admin.id}`, 'simulation_stopped', { sessionId }, eventId);
 		return { message: 'Simulation stopped.' };
+	},
+
+	/** A withdrawn team forfeits every counting game it hasn't started. */
+	forfeitAll: async ({ request, locals, params }) => {
+		const eventId = eventIdParam(params);
+		const user = requireEventRole(locals.auth, eventId, ['head_scorekeeper']);
+		const f = await request.formData();
+		const teamId = String(f.get('teamId') ?? '');
+		const reason = String(f.get('reason') ?? '').trim();
+		if (!reason) return fail(400, { error: 'Give a reason for the forfeits (for example, "Team went home after round 3").' });
+		const team = computeLive(eventId).withdrawn.find((t) => t.teamId === teamId);
+		if (!team) return fail(400, { error: 'That team has no remaining games to forfeit.' });
+		const ms = getDb().select().from(schema.matches).where(inArray(schema.matches.id, team.games.map((g) => g.matchId))).all();
+		for (const m of ms) {
+			const res = staffEvent(user, eventId, m.id, { type: 'forfeit', side: String(m.teamAId) === teamId ? 'A' : 'B', reason });
+			if (res.status !== 'accepted') return fail(400, { error: `Could not record the forfeit for round ${m.roundNo} (${res.reason}).` });
+		}
+		return { message: `Recorded ${ms.length} forfeit${ms.length === 1 ? '' : 's'} for ${team.name}.` };
 	},
 
 	resolveTie: async ({ request, locals, params }) => {

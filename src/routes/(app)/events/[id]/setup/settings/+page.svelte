@@ -121,9 +121,25 @@
 		<fieldset class="card">
 			<legend><h3>Team awards {@render badge('teamAwards')}</h3></legend>
 			<div class="grid cols-3">
-				<div class="field"><label for="teamPlaces">Team places per classification</label><input id="teamPlaces" name="teamPlaces" type="number" min="1" max="10" value={r.awards.teamPlaces} /></div>
+				<div class="field"><label for="teamPlaces">Team places per award division</label><input id="teamPlaces" name="teamPlaces" type="number" min="1" max="10" value={r.awards.teamPlaces} /></div>
 			</div>
-			<label class="check"><input type="checkbox" name="perSession" checked={r.awards.perSession} /> Team awards are given per classification within each session</label>
+		</fieldset>
+
+		<fieldset class="card">
+			<legend><h3>Award divisions {@render badge('divisions')}</h3></legend>
+			<p class="muted small">Team awards, and individual awards grouped by division, are given per division across the whole event. Classifications with the same division name are ranked together. Pools still decide who plays whom.</p>
+			<table class="data divisions">
+				<thead><tr><th>Classification</th><th>Award division</th></tr></thead>
+				<tbody>
+					{#each data.event.classifications as c (c)}
+						<tr>
+							<td>{c}</td>
+							<td><input name="division:{c}" type="text" list="division-names" required maxlength="60" value={r.awards.divisions[c] ?? c} aria-label="Award division for {c}" /></td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+			<datalist id="division-names">{#each [...new Set(Object.values(r.awards.divisions))] as d (d)}<option value={d}></option>{/each}</datalist>
 		</fieldset>
 
 		<fieldset class="card">
@@ -133,6 +149,7 @@
 				<div class="field">
 					<label for="individualGrouping">Individual awards grouped by</label>
 					<select id="individualGrouping" name="individualGrouping" value={r.awards.individualGrouping}>
+						<option value="division">Award division</option>
 						<option value="classification">Classification</option>
 						<option value="session">Session</option>
 						<option value="overall">Overall</option>

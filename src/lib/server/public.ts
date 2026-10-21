@@ -1,9 +1,10 @@
+import { isFinalStatus } from '$lib/engine';
 import { formatPoints } from '$lib/engine/points';
 import { error } from '@sveltejs/kit';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb, schema } from './db';
 import { computeLive } from './live';
-import { reportMode } from './reports';
+import { gameScore, groupStandings, reportMode } from './reports';
 
 /** Events whose results are public. Test events are never public. */
 export function publicEvents() {
@@ -36,9 +37,9 @@ export function publicResults(eventId: number) {
 				id: s.id,
 				name: s.name,
 				final: mode === 'final',
-				standings: st.classifications
-					.filter((g) => g.sessionId === String(s.id))
-					.sort((a, b) => live.event.classifications.indexOf(a.label) - live.event.classifications.indexOf(b.label))
+				standings: st.divisions
+					.filter((g) => g.sessionIds.includes(String(s.id)))
+					.map((pg) => groupStandings(live, pg.sessionIds).st.divisions.find((x) => x.key === pg.key) ?? pg)
 					.map((g) => ({
 						label: g.label,
 						rows: g.rows.map((r) => ({ place: r.place, tied: r.tied, team: teamName(r.teamId), wins: r.record.wins, losses: r.record.losses, points: formatPoints(r.record.totalPoints) }))
@@ -54,10 +55,11 @@ export function publicResults(eventId: number) {
 								teamA: teamName(m.teamA),
 								teamB: teamName(m.teamB),
 								counts: m.counts,
-								state: m.result.status === 'approved' || m.result.status === 'submitted' ? 'final' : m.result.status === 'not_started' ? 'upcoming' : 'live',
-								scoreA: formatPoints(m.result.teams.A.roundScore),
-								scoreB: formatPoints(m.result.teams.B.roundScore),
-								winner: m.result.status === 'approved' || m.result.status === 'submitted' ? m.result.winner : null
+								state: isFinalStatus(m.result.status) || m.result.status === 'submitted' ? 'final' : m.result.status === 'not_started' ? 'upcoming' : 'live',
+								scoreA: formatPoints(gameScore(m.result, 'A').mine),
+								scoreB: formatPoints(gameScore(m.result, 'B').mine),
+								winner: isFinalStatus(m.result.status) || m.result.status === 'submitted' ? m.result.winner : null,
+								note: m.result.forfeit ? 'forfeit' : m.result.decidedByTiebreaker ? 'tiebreaker' : ''
 							}))
 					}))
 			};

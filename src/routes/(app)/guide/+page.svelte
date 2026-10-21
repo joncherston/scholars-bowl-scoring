@@ -39,12 +39,16 @@
 				<li><strong>Finish:</strong> when every counting round is approved, click <em>Finalize session</em>, then Reports → <em>Awards sheet</em> for the ceremony.</li>
 			</ol>
 			<div class="box">
+				<h3>A team forfeits</h3>
+				<p>Not present within five minutes, a late school's first round, or a team that went home: open the round, choose the team under <em>Record forfeit</em>, and give a reason. The opponent gets the win and neither team scores; it counts as final with no separate approval, and the room's computer shows "Forfeit recorded — nothing to score". If a team withdraws mid-event, the Live tab lists its unplayed games with <em>Record forfeits for all remaining games</em>. To undo a forfeit, void it in the round's action history.</p>
+			</div>
+			<div class="box">
 				<h3>If the system is down</h3>
 				<p>Use the printed blank scoresheets (Reports → Blank paper scoresheets, print them beforehand). When the system is back, the room scorer enters the paper sheet into the scorer page tossup by tossup, and the head scorekeeper approves it as usual.</p>
 			</div>
 			<div class="box">
 				<h3>Rules at a glance (defaults)</h3>
-				<p>Tossups 10 points; no powers or negs. Bonuses only for the team that answered the tossup; partial credit per part. Individual scores count tossups only. Tiebreaker points count for the team, not the player. Non-counter games never count. Standings: rounds won, then total points, then head-to-head.</p>
+				<p>Tossups 10 points; no powers or negs. Bonuses only for the team that answered the tossup; partial credit per part. Individual scores count tossups only. Tiebreaker points decide the game but never count toward total points or individual scores. A forfeit is a win for the opponent with no points for either team. Non-counter games never count. Standings: rounds won, then total points, then head-to-head. Awards (team and individual) go by division: Private, Public 1A–3A, and Public 4A–7A.</p>
 			</div>
 		</section>
 	</div>
