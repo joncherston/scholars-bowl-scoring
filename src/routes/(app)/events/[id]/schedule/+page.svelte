@@ -156,7 +156,7 @@
 				<form method="POST" action="?/pools" class="card" use:enhance>
 					<input type="hidden" name="sessionId" value={data.sessionId} />
 					<h3>Pools</h3>
-					<p class="muted small">Teams play counting games within their pool. Give small classifications the same pool name to merge them (awards are still per classification).</p>
+					<p class="muted small">Teams play counting games within their pool. Give small classifications the same pool name to merge them. Awards follow the award divisions in Scoring settings, not the pools.</p>
 					<div class="pools">
 						{#each data.classifications as c (c)}
 							<label for="pool_{c}">{c} <span class="muted small">({teamsByClass(c)} teams)</span></label>
@@ -173,9 +173,20 @@
 						<label for="rounds">Rounds <span class="hint">(up to {data.maxRounds})</span></label>
 						<input id="rounds" name="rounds" type="number" min="1" max={data.maxRounds} value={data.session.roundCount} style="max-width: 120px" />
 					</div>
+					{#if data.pools.length > 1}
+						<div class="field">
+							<span class="label">Rounds for each pool <span class="hint">(blank = every round)</span></span>
+							{#each data.pools as p (p.id)}
+								<label class="check small">
+									<input name="poolRounds_{p.id}" type="number" min="1" max={data.maxRounds} value={p.rounds ?? ''} placeholder="all" style="max-width: 80px" aria-label="Rounds for {p.name}" />
+									{p.name}
+								</label>
+							{/each}
+						</div>
+					{/if}
 					<label class="check"><input type="checkbox" name="onlyArrived" checked={data.teams.some((t) => t.arrived)} /> Only teams that have checked in ({data.teams.filter((t) => t.arrived && !t.withdrawn).length} of {data.teams.filter((t) => !t.withdrawn).length})</label>
 					<label class="check"><input type="checkbox" name="fillByes" checked /> Fill byes with non-counter games (across classifications)</label>
-					<p class="muted small" style="margin-top: 8px">Round-robin within each pool, repeated to fill the rounds. Rooms: {data.rooms.length}.</p>
+					<p class="muted small" style="margin-top: 8px">Round-robin within each pool, repeated to fill the pool's rounds. Every team in a pool gets the same number of counting games; a game that would put one team ahead becomes a bye. Rooms: {data.rooms.length}.</p>
 					<button class="btn" type="submit">{data.matches.length ? 'Regenerate draft' : 'Generate draft'}</button>
 				</form>
 			</div>

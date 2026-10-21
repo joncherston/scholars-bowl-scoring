@@ -10,6 +10,8 @@ export interface SchedTeam {
 	classification: string;
 	poolKey: string;
 	withdrawn?: boolean;
+	/** Last round the team's pool plays, when the pool plays fewer rounds than the session. */
+	lastRound?: number | null;
 }
 
 export interface SchedRoom {
@@ -33,6 +35,8 @@ export interface PoolDef {
 	key: string;
 	name: string;
 	teamIds: number[];
+	/** Rounds this pool plays (default: every round of the session). */
+	rounds?: number | null;
 }
 
 type Pair = [number, number | null];
@@ -80,21 +84,37 @@ export function generateSchedule(input: GenerateInput): GenerateResult {
 	const warnings: string[] = [];
 	const perRound: { counting: SchedMatch[]; byes: number[] }[] = Array.from({ length: rounds }, () => ({ counting: [], byes: [] }));
 
+	const leftOut = new Set<string>();
 	for (const pool of pools) {
+		const poolRounds = Math.max(1, Math.min(rounds, pool.rounds ?? rounds));
 		const cycle = roundRobin(pool.teamIds);
 		if (!cycle.length) continue;
-		for (let r = 0; r < rounds; r++) {
+		const games: SchedMatch[] = [];
+		for (let r = 0; r < poolRounds; r++) {
 			const pass = Math.floor(r / cycle.length);
 			for (const [a, b] of cycle[r % cycle.length]) {
 				if (b === null) perRound[r].byes.push(a);
 				else {
 					const [x, y] = pass % 2 ? [b, a] : [a, b];
-					perRound[r].counting.push({ roundNo: r + 1, roomId: 0, teamA: x, teamB: y, counts: true, poolKey: pool.key });
+					games.push({ roundNo: r + 1, roomId: 0, teamA: x, teamB: y, counts: true, poolKey: pool.key });
 				}
 			}
 		}
-		if (pool.teamIds.length > 2 && rounds < cycle.length)
-			warnings.push(`${pool.name}: ${rounds} rounds is not enough for every team to play every other team once (needs ${cycle.length}).`);
+		// Every team in a pool plays the same number of counting games; a game that would put a
+		// team ahead becomes a bye for both teams instead.
+		const drop = equalizeGames(games, pool.teamIds);
+		for (const g of games) {
+			if (drop.games.has(g)) {
+				perRound[g.roundNo - 1].byes.push(g.teamA, g.teamB);
+				leftOut.add(pairKey(g.teamA, g.teamB));
+			} else perRound[g.roundNo - 1].counting.push(g);
+		}
+		if (pool.teamIds.length > 2 && poolRounds < cycle.length)
+			warnings.push(`${pool.name}: ${poolRounds} rounds is not enough for every team to play every other team once (needs ${cycle.length}).`);
+		if (drop.games.size)
+			warnings.push(
+				`${pool.name}: every team plays ${drop.perTeam} counting games so that games are equal; ${drop.games.size} game(s) were left out, and those teams sit out that round (or play a non-counter).`
+			);
 		if (pool.teamIds.length === 1)
 			warnings.push(`${pool.name}: only one team, so it has no counting games. Consider merging it with another pool.`);
 	}
@@ -102,7 +122,6 @@ export function generateSchedule(input: GenerateInput): GenerateResult {
 	// Fill byes with cross-pool non-counter games.
 	const ncCount = new Map<number, number>();
 	const ncPairs = new Set<string>();
-	const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 	const allMatches: SchedMatch[] = [];
 	const byes: { roundNo: number; teamId: number }[] = [];
 	for (let r = 0; r < rounds; r++) {
@@ -116,7 +135,7 @@ export function generateSchedule(input: GenerateInput): GenerateResult {
 				if (paired.has(a)) continue;
 				const options = left.filter((b) => b !== a && !paired.has(b));
 				const score = (b: number) =>
-					(ncPairs.has(pairKey(a, b)) ? 10 : 0) + (teamById.get(a)?.schoolId === teamById.get(b)?.schoolId ? 5 : 0) + (ncCount.get(b) ?? 0);
+					(leftOut.has(pairKey(a, b)) ? 20 : 0) + (ncPairs.has(pairKey(a, b)) ? 10 : 0) + (teamById.get(a)?.schoolId === teamById.get(b)?.schoolId ? 5 : 0) + (ncCount.get(b) ?? 0);
 				const b = options.sort((x, y) => score(x) - score(y))[0];
 				if (b === undefined) continue;
 				paired.add(a).add(b);
@@ -146,6 +165,60 @@ export function generateSchedule(input: GenerateInput): GenerateResult {
 
 	assignRooms(allMatches, rooms, rounds);
 	return { matches: allMatches, byes, warnings };
+}
+
+const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+
+/**
+ * The fewest games to leave out so every team in a pool plays the same number of counting
+ * games. With an odd number of teams that can be fewer games than rounds: 9 teams in 8 rounds
+ * play 6 each, because 9 × 7 is odd. Rematches are left out first (so 7 teams in 8 rounds play
+ * one full round robin), then games spread across rounds, latest first.
+ */
+export function equalizeGames(games: SchedMatch[], teamIds: number[]): { games: Set<SchedMatch>; perTeam: number } {
+	const count = new Map(teamIds.map((id) => [id, 0]));
+	for (const g of games) {
+		count.set(g.teamA, (count.get(g.teamA) ?? 0) + 1);
+		count.set(g.teamB, (count.get(g.teamB) ?? 0) + 1);
+	}
+	const meetings = new Map<string, number>();
+	for (const g of games) meetings.set(pairKey(g.teamA, g.teamB), (meetings.get(pairKey(g.teamA, g.teamB)) ?? 0) + 1);
+	const most = Math.min(...count.values());
+	const step = teamIds.length % 2 ? 2 : 1;
+	for (let perTeam = (most * teamIds.length) % 2 ? most - 1 : most; perTeam >= 0; perTeam -= step) {
+		const need = new Map([...count].map(([id, c]) => [id, c - perTeam]));
+		const dropped = new Set<SchedMatch>();
+		const perRound = new Map<number, number>();
+		let budget = 50_000;
+		const search = (): boolean => {
+			if (--budget < 0) return false;
+			let t: number | undefined;
+			for (const [id, n] of need) if (n > 0 && (t === undefined || n > need.get(t)!)) t = id;
+			if (t === undefined) return true;
+			const options = games
+				.filter((g) => !dropped.has(g) && (g.teamA === t || g.teamB === t) && need.get(g.teamA === t ? g.teamB : g.teamA)! > 0)
+				.sort(
+					(a, b) =>
+						meetings.get(pairKey(b.teamA, b.teamB))! - meetings.get(pairKey(a.teamA, a.teamB))! ||
+						(perRound.get(a.roundNo) ?? 0) - (perRound.get(b.roundNo) ?? 0) ||
+						b.roundNo - a.roundNo
+				);
+			for (const g of options) {
+				dropped.add(g);
+				perRound.set(g.roundNo, (perRound.get(g.roundNo) ?? 0) + 1);
+				need.set(g.teamA, need.get(g.teamA)! - 1);
+				need.set(g.teamB, need.get(g.teamB)! - 1);
+				if (search()) return true;
+				dropped.delete(g);
+				perRound.set(g.roundNo, perRound.get(g.roundNo)! - 1);
+				need.set(g.teamA, need.get(g.teamA)! + 1);
+				need.set(g.teamB, need.get(g.teamB)! + 1);
+			}
+			return false;
+		};
+		if (search()) return { games: dropped, perTeam };
+	}
+	return { games: new Set(), perTeam: most };
 }
 
 /**
@@ -225,6 +298,9 @@ export function validateSchedule({ teams, rooms, roundCount, matches }: Validate
 				});
 			if (m.counts && a && b && a.poolKey !== b.poolKey)
 				issues.push({ level: 'warning', message: `Round ${r}: ${a.name} vs ${b.name} counts, but they are in different pools.`, roundNo: r, matchIds: ids(m) });
+			for (const t of [a, b])
+				if (t?.lastRound && r > t.lastRound)
+					issues.push({ level: 'warning', message: `Round ${r}: ${t.name}'s pool plays only ${t.lastRound} rounds.`, roundNo: r, teamIds: [t.id], matchIds: ids(m) });
 		}
 	}
 
@@ -244,7 +320,7 @@ export function validateSchedule({ teams, rooms, roundCount, matches }: Validate
 			}
 		}
 		const counts = [...games.values()];
-		if (Math.max(...counts) - Math.min(...counts) > 1)
+		if (Math.max(...counts) !== Math.min(...counts))
 			issues.push({
 				level: 'warning',
 				message: `${members[0].classification} pool: teams have unequal numbers of counting games (${members.map((t) => `${t.name} ${games.get(t.id)}`).join(', ')}).`,
@@ -267,14 +343,14 @@ export function validateSchedule({ teams, rooms, roundCount, matches }: Validate
 	return issues;
 }
 
-/** Teams with no game in a round. */
+/** Teams with no game in a round (a team whose pool has finished its rounds is done, not on a bye). */
 export function byesByRound(teams: SchedTeam[], matches: SchedMatch[], roundCount: number): Map<number, number[]> {
 	const out = new Map<number, number[]>();
 	for (let r = 1; r <= roundCount; r++) {
 		const busy = new Set(matches.filter((m) => m.roundNo === r).flatMap((m) => [m.teamA, m.teamB]));
 		out.set(
 			r,
-			teams.filter((t) => !t.withdrawn && !busy.has(t.id)).map((t) => t.id)
+			teams.filter((t) => !t.withdrawn && !busy.has(t.id) && !(t.lastRound && r > t.lastRound)).map((t) => t.id)
 		);
 	}
 	return out;

@@ -134,7 +134,9 @@ export const pools = sqliteTable('pools', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
 	sessionId: integer('session_id').notNull().references(() => sessions.id),
 	name: text('name').notNull(),
-	classifications: text('classifications', { mode: 'json' }).$type<string[]>().notNull()
+	classifications: text('classifications', { mode: 'json' }).$type<string[]>().notNull(),
+	/** Rounds this pool plays; null = every round of the session. */
+	rounds: integer('rounds')
 });
 
 export const teams = sqliteTable(

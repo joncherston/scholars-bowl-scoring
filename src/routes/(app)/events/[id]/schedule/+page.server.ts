@@ -3,7 +3,7 @@ import { audit } from '$lib/server/audit';
 import { getDb, schema } from '$lib/server/db';
 import { currentRuleVersion, eventIdParam, listSessions } from '$lib/server/events';
 import { requireEventRole } from '$lib/server/guard';
-import { generateDraft, getSession, loadSchedule, poolIdForTeams, savePools, startedMatchIds } from '$lib/server/schedule';
+import { generateDraft, getSession, loadSchedule, poolIdForTeams, savePoolRounds, savePools, startedMatchIds } from '$lib/server/schedule';
 import { fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 
@@ -55,6 +55,15 @@ export const actions = {
 		const max = currentRuleVersion(eventId).settings.maxRoundsPerSession;
 		const rounds = Number(f.get('rounds'));
 		if (!Number.isInteger(rounds) || rounds < 1 || rounds > max) return fail(400, { error: `Rounds must be between 1 and ${max}.` });
+		// Each pool may play fewer rounds than the session (for example 1A–3A 6 of the morning's 8).
+		const poolRounds: Record<number, number | null> = {};
+		for (const [k, v] of f.entries()) {
+			if (!k.startsWith('poolRounds_')) continue;
+			const n = String(v).trim() === '' ? null : Number(v);
+			if (n !== null && (!Number.isInteger(n) || n < 1 || n > rounds)) return fail(400, { error: `A pool's rounds must be between 1 and ${rounds}.` });
+			poolRounds[Number(k.slice('poolRounds_'.length))] = n;
+		}
+		if (startedMatchIds(sessionId).size === 0) savePoolRounds(sessionId, rounds, poolRounds);
 		const res = generateDraft(eventId, sessionId, {
 			rounds,
 			onlyArrived: f.get('onlyArrived') === 'on',

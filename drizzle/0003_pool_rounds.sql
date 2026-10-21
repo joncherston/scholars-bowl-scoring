@@ -1,0 +1,1 @@
+ALTER TABLE `pools` ADD `rounds` integer;

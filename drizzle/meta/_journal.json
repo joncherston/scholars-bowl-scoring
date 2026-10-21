@@ -22,6 +22,13 @@
       "when": 1792116024422,
       "tag": "0002_tie_resolutions",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792620526539,
+      "tag": "0003_pool_rounds",
+      "breakpoints": true
     }
   ]
 }

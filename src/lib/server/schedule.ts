@@ -59,7 +59,8 @@ export function loadSchedule(eventId: number, sessionId: number) {
 		poolKey: poolKeyFor(pools, t.classification),
 		poolName: poolLabel(pools, t.classification),
 		withdrawn: t.withdrawn,
-		arrived: !!t.arrivedAt
+		arrived: !!t.arrivedAt,
+		lastRound: pools.find((p) => p.classifications.includes(t.classification))?.rounds ?? null
 	}));
 	const rooms = sessionRooms(sessionId);
 	const started = startedMatchIds(sessionId);
@@ -97,8 +98,20 @@ export function savePools(sessionId: number, assignment: Record<string, string>)
 			tx.update(schema.matches).set({ poolId: null }).where(inArray(schema.matches.poolId, old.map((p) => p.id))).run();
 			tx.delete(schema.pools).where(eq(schema.pools.sessionId, sessionId)).run();
 		}
-		for (const [name, classifications] of byName) tx.insert(schema.pools).values({ sessionId, name, classifications }).run();
+		// A pool that keeps its name keeps its round count.
+		for (const [name, classifications] of byName)
+			tx.insert(schema.pools).values({ sessionId, name, classifications, rounds: old.find((p) => p.name === name)?.rounds ?? null }).run();
 	});
+}
+
+/** Set how many rounds each pool plays (null or the session's count = every round). */
+export function savePoolRounds(sessionId: number, sessionRounds: number, rounds: Record<number, number | null>) {
+	const db = getDb();
+	for (const p of sessionPools(sessionId)) {
+		if (!(p.id in rounds)) continue;
+		const r = rounds[p.id];
+		db.update(schema.pools).set({ rounds: r && r < sessionRounds ? r : null }).where(eq(schema.pools.id, p.id)).run();
+	}
 }
 
 export interface DraftOptions {
@@ -115,7 +128,7 @@ export function generateDraft(eventId: number, sessionId: number, opts: DraftOpt
 	const pools = ensurePools(sessionId, teams.map((t) => t.classification));
 	const playing = teams.filter((t) => !t.withdrawn && (!opts.onlyArrived || t.arrived));
 	const poolDefs: PoolDef[] = pools
-		.map((p) => ({ key: `pool:${p.id}`, name: p.name, teamIds: playing.filter((t) => p.classifications.includes(t.classification)).map((t) => t.id) }))
+		.map((p) => ({ key: `pool:${p.id}`, name: p.name, rounds: p.rounds, teamIds: playing.filter((t) => p.classifications.includes(t.classification)).map((t) => t.id) }))
 		.filter((p) => p.teamIds.length);
 	const schedTeams = playing.map((t) => ({ ...t, poolKey: poolKeyFor(pools, t.classification) }));
 	const res = generateSchedule({ pools: poolDefs, teams: schedTeams, rooms: rooms as SchedRoom[], rounds: opts.rounds, fillByesWithNonCounters: opts.fillByesWithNonCounters });
