@@ -2,6 +2,39 @@
 	let { data } = $props();
 	const base = $derived(`/events/${data.event.id}/reports`);
 	const pdf = (path: string, name: string) => `${base}/pdf?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}`;
+
+	let packetBusy = $state(false);
+	let packetStatus = $state<{ kind: 'success' | 'warning' | 'error'; text: string } | null>(null);
+
+	/** Fetch the review packet and save it (one download), reporting progress and problems on the page. */
+	async function downloadPacket() {
+		packetBusy = true;
+		packetStatus = null;
+		try {
+			const res = await fetch(`${base}/packet.zip`, { headers: { Accept: 'application/zip, application/json' } });
+			if (!res.ok) {
+				const message = await res.json().then((b) => b?.message, () => null);
+				packetStatus = { kind: 'error', text: message ?? `The review packet could not be made (error ${res.status}).` };
+				return;
+			}
+			const blob = await res.blob();
+			const a = document.createElement('a');
+			a.href = URL.createObjectURL(blob);
+			a.download = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'review-packet.zip';
+			document.body.append(a);
+			a.click();
+			a.remove();
+			setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+			const missing = Number(res.headers.get('X-Packet-Missing') ?? 0);
+			packetStatus = missing
+				? { kind: 'warning', text: `Downloaded, but ${missing} PDF${missing === 1 ? '' : 's'} could not be made. The Read me lists which; download them below.` }
+				: { kind: 'success', text: 'Review packet downloaded.' };
+		} catch {
+			packetStatus = { kind: 'error', text: 'The review packet could not be downloaded. Check the connection and try again.' };
+		} finally {
+			packetBusy = false;
+		}
+	}
 </script>
 
 <svelte:head><title>Reports · {data.event.name}</title></svelte:head>
@@ -17,6 +50,14 @@
 			<a class="btn secondary" href={pdf(`${base}/awards`, 'awards')}>Awards sheet PDF</a>
 			<a class="btn secondary" href="{base}/export.xlsx">Excel workbook (.xlsx)</a>
 		</div>
+		{#if data.can.reports}
+			<h4 style="margin: 16px 0 4px">Review packet</h4>
+			<p class="small muted" style="margin: 0 0 8px">One .zip for checking results: the awards sheet, each session's full results, completed scoresheets and schedule as PDFs, the Excel workbook, and a Read me with the rules and anything still open. It takes a minute or two.</p>
+			<div class="row">
+				<button class="btn" type="button" onclick={downloadPacket} disabled={packetBusy}>{packetBusy ? 'Preparing the review packet…' : 'Download review packet'}</button>
+			</div>
+			{#if packetStatus}<div class="alert {packetStatus.kind}" role={packetStatus.kind === 'error' ? 'alert' : 'status'} style="margin-top: 8px">{packetStatus.text}</div>{/if}
+		{/if}
 	</div>
 
 	{#each data.sessionList as s (s.id)}
@@ -32,6 +73,7 @@
 				<a class="btn secondary" href={pdf(`${base}/results?session=${s.id}`, `results-${s.name}`)}>Full results PDF</a>
 				<a class="btn secondary" href="{base}/scoresheets?session={s.id}">Completed scoresheets</a>
 				<a class="btn secondary" href={pdf(`${base}/scoresheets?session=${s.id}`, `scoresheets-${s.name}`)}>Completed scoresheets PDF</a>
+				<a class="btn secondary" href={pdf(`/events/${data.event.id}/schedule/print?session=${s.id}`, `schedule-${s.name}`)}>Schedule PDF</a>
 			</div>
 			<p class="small muted" style="margin: 12px 0 4px">Blank paper scoresheets (teams and players filled in), for a paper backup:</p>
 			<div class="row">

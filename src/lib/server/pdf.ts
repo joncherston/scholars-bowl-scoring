@@ -32,3 +32,24 @@ export function renderPdf(url: string, cookie: string, landscape = false): Promi
 		}
 	});
 }
+
+/** Where the headless browser reaches this server: the app's own port in production, not the public address. */
+export const renderOrigin = (url: URL) => (process.env.PORT && process.env.NODE_ENV === 'production' ? `http://127.0.0.1:${process.env.PORT}` : url.origin);
+
+/**
+ * The pages that may be rendered to PDF: this event's report pages and its schedule printout
+ * (landscape, for the room grid). Returns the normalized path to render, or null.
+ */
+export function printablePage(eventId: number, path: string): { path: string; landscape: boolean } | null {
+	if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\')) return null;
+	let u: URL;
+	try {
+		u = new URL(path, 'http://app.invalid');
+	} catch {
+		return null;
+	}
+	if (u.origin !== 'http://app.invalid') return null;
+	if (new RegExp(`^/events/${eventId}/reports/(awards|results|scoresheets|round/\\d+)$`).test(u.pathname)) return { path: u.pathname + u.search, landscape: false };
+	if (u.pathname === `/events/${eventId}/schedule/print`) return { path: u.pathname + u.search, landscape: true };
+	return null;
+}
