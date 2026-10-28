@@ -4,12 +4,14 @@ import { getDb, schema } from '$lib/server/db';
 import { ingestEvents, matchEvents, ROOM_TYPES, rulesForMatch } from '$lib/server/ingest';
 import { noteFailure, tooManyFailures } from '$lib/server/rate-limit';
 import { computeRound } from '$lib/engine';
+import { SCORER_MODE_COOKIE, scorerPath } from '$lib/scorer-types';
 import { fail, redirect } from '@sveltejs/kit';
 import { and, eq, ne } from 'drizzle-orm';
 import crypto from 'node:crypto';
 
-export function load({ locals }) {
-	if (locals.auth.kind === 'room') redirect(303, '/scorer');
+export function load({ locals, cookies }) {
+	if (locals.auth.kind === 'room') redirect(303, scorerPath(cookies.get(SCORER_MODE_COOKIE)));
+	return { mode: cookies.get(SCORER_MODE_COOKIE) === 'sheet' ? 'sheet' : 'screen' };
 }
 
 const DEVICE = /^[0-9a-f-]{36}$/i;
@@ -20,6 +22,7 @@ export const actions = {
 		const pin = String(f.get('pin') ?? '').replace(/\D/g, '');
 		const deviceId = String(f.get('deviceId') ?? '');
 		const takeover = f.get('takeover') === '1';
+		const mode = f.get('mode') === 'sheet' ? 'sheet' : 'screen';
 		const ip = getClientAddress();
 		if (!DEVICE.test(deviceId)) return fail(400, { error: 'This browser could not create a device ID. Please reload the page.' });
 
@@ -43,7 +46,7 @@ export const actions = {
 
 		const { room, event } = hit;
 		if (room.activeDeviceId && room.activeDeviceId !== deviceId && !takeover) {
-			return fail(409, { needsTakeover: true, pin, roomName: room.name, lastHeardAt: room.lastHeardAt, eventName: event.name });
+			return fail(409, { needsTakeover: true, pin, mode, roomName: room.name, lastHeardAt: room.lastHeardAt, eventName: event.name });
 		}
 		if (room.activeDeviceId && room.activeDeviceId !== deviceId) {
 			const previous = room.activeDeviceId;
@@ -64,6 +67,7 @@ export const actions = {
 			audit(`room:${room.id}`, 'room_login', { deviceId, ip }, event.id);
 		}
 		createRoomSession(cookies, { id: room.id, name: room.name, eventId: event.id }, deviceId);
-		redirect(303, '/scorer');
+		cookies.set(SCORER_MODE_COOKIE, mode, { path: '/', maxAge: 60 * 60 * 24 * 365, httpOnly: false, sameSite: 'lax' });
+		redirect(303, scorerPath(mode));
 	}
 };

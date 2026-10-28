@@ -21,6 +21,10 @@
 				<li><strong>Submit:</strong> read the final score to the moderator, tick the box, and click <em>Submit round</em>. The round then locks. Click <em>Next game</em>.</li>
 			</ol>
 			<div class="box">
+				<h3>Prefer the spreadsheet?</h3>
+				<p>At sign-in choose <em>Start scoring with the spreadsheet</em>: the same scoresheet as past years, a tab for each round, with the room, round, schools and players filled in. Type the moderator's name, then <strong>10</strong> under the player who answered (<strong>0</strong> for a wrong answer) and the points in <em>Bonus Points</em>. Row 26 is the tiebreaker. At the end, click <em>Submit round</em>. Kept score in your own Excel file? Open that round's tab and click <em>Import scores</em>. Switch screens any time from <em>Menu</em>.</p>
+			</div>
+			<div class="box">
 				<h3>Watch the top-right corner</h3>
 				<p><strong>"All changes saved"</strong>: everything is on the server.</p>
 				<p><strong>"Offline — N actions waiting"</strong>: keep scoring and <u>don't close the window</u>; it catches up on its own. If the computer must be closed or restarted while offline, first click <em>Download unsaved results</em> and take the file (flash drive) to the head scorekeeper.</p>

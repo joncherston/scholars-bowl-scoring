@@ -7,7 +7,7 @@
 	import TossupLog from '$lib/components/TossupLog.svelte';
 	import { computeRound, other, type BonusPart, type EventBody, type Side } from '$lib/engine';
 	import { bonusShare, formatPoints, parsePoints } from '$lib/engine/points';
-	import type { ScorerMatch } from '$lib/scorer-types';
+	import { rememberScorerMode, type ScorerMatch } from '$lib/scorer-types';
 	import { onDestroy, onMount, tick } from 'svelte';
 
 	const store = new ScorerStore();
@@ -328,6 +328,7 @@
 
 	let clock: ReturnType<typeof setInterval>;
 	onMount(async () => {
+		rememberScorerMode('screen');
 		await store.init();
 		if (store.loadError === 'signed_out' && !store.state) {
 			goto('/room');
@@ -378,6 +379,7 @@
 				{#if menuOpen}
 					<div class="menu-pop" role="menu">
 						{#if status === 'in_progress'}<button type="button" role="menuitem" onclick={openFixLineup}>Fix lineup (wrong players chosen)</button>{/if}
+						<button type="button" role="menuitem" onclick={() => { rememberScorerMode('sheet'); goto('/sheet'); }}>Switch to the spreadsheet</button>
 						<button type="button" role="menuitem" onclick={() => { store.downloadRescueFile(); menuOpen = false; }}>Download results file (for a flash drive)</button>
 						{#if store.state}<a role="menuitem" href="/projector/{store.state.room.projectorToken}" target="_blank" rel="noopener">Open projector view</a>{/if}
 						<button type="button" role="menuitem" onclick={() => { helpOpen = true; menuOpen = false; }}>Keyboard shortcuts</button>

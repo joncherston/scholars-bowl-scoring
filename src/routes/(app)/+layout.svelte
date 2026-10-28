@@ -21,7 +21,7 @@
 				<a href="/account" aria-current={page.url.pathname.startsWith('/account') ? 'page' : undefined}>{auth.name}</a>
 				<form method="POST" action="/logout"><button class="linklike" type="submit">Sign out</button></form>
 			{:else if auth.kind === 'room'}
-				<a href="/scorer">{auth.roomName} scorer</a>
+				<a href="/room">{auth.roomName} scorer</a>
 				<form method="POST" action="/logout"><button class="linklike" type="submit">Sign out</button></form>
 			{:else}
 				<a href="/results">Results</a>

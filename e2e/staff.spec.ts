@@ -99,7 +99,7 @@ test.describe('device takeover', () => {
 		const p2 = await c2.newPage();
 		await p2.goto('/room');
 		await p2.getByLabel('Room PIN').fill(g.pin);
-		await p2.getByRole('button', { name: 'Start scoring' }).click();
+		await p2.getByRole('button', { name: /with the new screen/ }).click();
 		await expect(p2.getByRole('heading', { name: new RegExp(`${g.roomName} is open on another computer`) })).toBeVisible();
 		await p2.getByRole('button', { name: /on this computer/ }).click();
 		await p2.waitForURL('**/scorer');
@@ -134,7 +134,7 @@ test.describe('access control', () => {
 		expect((await request.get(`/results/${eventId}`)).status()).toBe(404); // practice events are never public
 		await ap.goto('/room');
 		await ap.getByLabel('Room PIN').fill('000000');
-		await ap.getByRole('button', { name: 'Start scoring' }).click();
+		await ap.getByRole('button', { name: /with the new screen/ }).click();
 		await expect(ap.getByText(/That PIN does not match a room/)).toBeVisible();
 
 		// A room scorer cannot open staff pages.

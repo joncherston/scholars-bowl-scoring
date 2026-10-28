@@ -97,7 +97,7 @@ test.describe('offline scoring', () => {
 		const p2 = await c2.newPage();
 		await p2.goto('/room');
 		await p2.getByLabel('Room PIN').fill(g.pin);
-		await p2.getByRole('button', { name: 'Start scoring' }).click();
+		await p2.getByRole('button', { name: /with the new screen/ }).click();
 		await expect(p2.getByRole('heading', { name: /is open on another computer/ })).toBeVisible();
 		await p2.getByRole('button', { name: /score .* on this computer/ }).click();
 		await p2.waitForURL('**/scorer');
