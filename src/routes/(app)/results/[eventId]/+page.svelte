@@ -97,6 +97,7 @@
 							{/if}
 						</div>
 						<div>
+							{#if !(d.classes.length === 1 && d.classes[0].rows.length === d.rows.length)}
 							<h3>By classification</h3>
 							<div class="classes">
 								{#each d.classes as c (c.classification)}
@@ -110,6 +111,7 @@
 									</table>
 								{/each}
 							</div>
+							{/if}
 							{#if d.individuals.length}
 								<h3>Top individual scorers</h3>
 								<table class="data">
@@ -236,8 +238,11 @@
 	}
 	.classes {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 		gap: 10px;
+	}
+	.num {
+		white-space: nowrap;
 	}
 	.small-table caption {
 		text-align: left;
