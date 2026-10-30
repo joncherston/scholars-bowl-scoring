@@ -110,12 +110,12 @@ describe('pool play then a bracket (the 2026 afternoon shape)', () => {
 		score({ Va: 5, Sy: 6 });
 		score({ Au: 10, Ox: 9 });
 		const a1 = advanceBrackets(eventId, 'test');
-		expect(a1.created).toEqual(['Public 4A–7A Semifinal 1: Au v Va (round 4)', 'Public 4A–7A Semifinal 2: Sy v Ox (round 4)']);
+		expect(a1.created).toEqual(['Public 4A–7A Semifinal 1: Au v Va (round 4, Room 214)', 'Public 4A–7A Semifinal 2: Sy v Ox (round 4, Room 215)']);
 
 		score({ Au: 12, Va: 4 });
 		score({ Sy: 6, Ox: 13 });
 		const a2 = advanceBrackets(eventId, 'test');
-		expect(a2.created).toEqual(['Public 4A–7A Championship: Au v Ox (round 5)', 'Public 4A–7A 3rd-place game: Va v Sy (round 5)']);
+		expect(a2.created).toEqual(['Public 4A–7A Championship: Au v Ox (round 5, Room 214)', 'Public 4A–7A 3rd-place game: Va v Sy (round 5, Room 215)']);
 
 		score({ Au: 7, Ox: 8 });
 		score({ Va: 1, Sy: 4 });

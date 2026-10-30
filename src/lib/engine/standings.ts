@@ -296,12 +296,14 @@ export function computeStandings(input: StandingsInput): Standings {
 	const rankGroup = (key: string, kind: StandingGroup['kind'], g: Group): StandingGroup => {
 		const fmt = kind === 'division' && g.division ? formatOf(rules, g.division) : null;
 		if (fmt?.type === 'bracket') return rankBracketDivision(key, g, fmt);
-		const tiers = rankTiers(g.ids, rules.standings.order, records);
+		// Pools show pool play only (bracket games are not pool games).
+		const recs = kind === 'pool' ? seedRecords : records;
+		const tiers = rankTiers(g.ids, rules.standings.order, recs);
 		const rows: StandingRow[] = [];
 		let place = 1;
 		for (const tier of tiers) {
 			const sortedTier = [...tier].sort((a, b) => (teamById.get(a)?.name ?? '').localeCompare(teamById.get(b)?.name ?? ''));
-			for (const id of sortedTier) rows.push({ teamId: id, place, tied: tier.length > 1, record: records[id] });
+			for (const id of sortedTier) rows.push({ teamId: id, place, tied: tier.length > 1, record: recs[id] });
 			if (kind === 'division' && tier.length > 1 && place <= rules.awards.teamPlaces)
 				flags.push({
 					kind: 'team_tie',
@@ -314,7 +316,7 @@ export function computeStandings(input: StandingsInput): Standings {
 		const sessionIds = sessionsOf(g.ids);
 		const soleTeam = g.ids.length === 1;
 		if (kind !== 'classification') {
-			const played = new Set(g.ids.map((id) => records[id].played));
+			const played = new Set(g.ids.map((id) => recs[id].played));
 			if (played.size > 1)
 				flags.push({ kind: 'unequal_games', message: `${g.label}: teams have played different numbers of counting games`, groupKey: key, teamIds: g.ids });
 		}

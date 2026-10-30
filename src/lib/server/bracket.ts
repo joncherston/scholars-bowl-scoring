@@ -57,13 +57,17 @@ export function planBrackets(eventId: number, sessionId: number, actor: string):
 		for (const m of sched.matches) if (!dropMatchIds.includes(m.id!)) take(m.roundNo, m.roomId);
 		for (const s of keep) if (s.roomId) take(s.roundNo, s.roomId);
 
-		for (const [division, { fmt, teamIds }] of divisions) {
-			const plan = bracketPlan(fmt, teamIds.length);
+		// Counting bracket games get rooms first (every division), then the non-counters.
+		const planned = [...divisions].flatMap(([division, { fmt, teamIds }]) => {
 			// Rooms this division used most in pool play come first.
 			const use = new Map<number, number>();
-			for (const m of sched.matches) if (teamIds.includes(m.teamA) || teamIds.includes(m.teamB)) use.set(m.roomId, (use.get(m.roomId) ?? 0) + 1);
+			for (const m of sched.matches) if (teamIds.includes(m.teamA) || teamIds.includes(m.teamB)) use.set(m.roomId, (use.get(m.roomId) ?? 0) + (m.counts ? 1 : 0));
 			const preferred = [...rooms].sort((a, b) => (use.get(b.id) ?? 0) - (use.get(a.id) ?? 0) || a.sortOrder - b.sortOrder);
-			for (const p of plan.sort((a, b) => a.bracketRound - b.bracketRound || Number(b.counts) - Number(a.counts))) {
+			return bracketPlan(fmt, teamIds.length).map((p) => ({ p, division, fmt, preferred }));
+		});
+		planned.sort((a, b) => Number(b.p.counts) - Number(a.p.counts) || a.fmt.seedingRounds + a.p.bracketRound - (b.fmt.seedingRounds + b.p.bracketRound));
+		for (const { p, division, fmt, preferred } of planned) {
+			{
 				if (keep.some((k) => k.division === division && k.slot === p.slot)) continue;
 				const roundNo = fmt.seedingRounds + p.bracketRound;
 				maxRound = Math.max(maxRound, roundNo);
@@ -173,7 +177,7 @@ export function advanceBrackets(eventId: number, actor: string, opts: { sessionI
 						.returning()
 						.all();
 					db.update(schema.bracketSlots).set({ matchId: m.id }).where(eq(schema.bracketSlots.id, slot.id)).run();
-					out.created.push(`${label}: ${teamName(live, a)} v ${teamName(live, b)} (round ${slot.roundNo})`);
+					out.created.push(`${label}: ${teamName(live, a)} v ${teamName(live, b)} (round ${slot.roundNo}, ${live.rooms.find((r) => r.id === slot.roomId)?.name ?? 'room ?'})`);
 					audit(actor, 'bracket_game_created', { sessionId, division, slot: slot.slot, matchId: m.id, teamA: a, teamB: b, forced: !!opts.force && !seedsReady }, eventId);
 					continue;
 				}
