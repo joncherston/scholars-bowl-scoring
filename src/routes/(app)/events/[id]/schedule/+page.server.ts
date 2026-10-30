@@ -3,7 +3,8 @@ import { audit } from '$lib/server/audit';
 import { getDb, schema } from '$lib/server/db';
 import { currentRuleVersion, eventIdParam, listSessions } from '$lib/server/events';
 import { requireEventRole } from '$lib/server/guard';
-import { generateDraft, getSession, loadSchedule, poolIdForTeams, savePoolRounds, savePools, startedMatchIds } from '$lib/server/schedule';
+import { advanceBrackets, planBrackets } from '$lib/server/bracket';
+import { generateDraft, getSession, loadSchedule, poolIdForTeams, savePoolRounds, savePools, saveTeamPools, startedMatchIds } from '$lib/server/schedule';
 import { fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 
@@ -70,8 +71,69 @@ export const actions = {
 			fillByesWithNonCounters: f.get('fillByes') === 'on'
 		});
 		if (!res.ok) return fail(400, { error: res.error });
+		const bracketWarnings = planBrackets(eventId, sessionId, `user:${user.id}`);
 		audit(`user:${user.id}`, 'schedule_generated', { sessionId, rounds, games: res.matches }, eventId);
-		return { generated: true, warnings: res.warnings };
+		return { generated: true, warnings: [...res.warnings, ...bracketWarnings] };
+	},
+
+	/** Split a classification into pools by team (e.g. Private Pools A, B, C). */
+	teamPools: async ({ request, locals, params }) => {
+		const { eventId, user } = ctx(locals, params);
+		const f = await request.formData();
+		const sessionId = Number(f.get('sessionId'));
+		getSession(eventId, sessionId);
+		if (startedMatchIds(sessionId).size) return fail(400, { error: 'Scoring has started; pools can no longer change.' });
+		const assignment: Record<number, string> = {};
+		for (const [k, v] of f.entries()) if (k.startsWith('teamPool_')) assignment[Number(k.slice(9))] = String(v).slice(0, 40);
+		saveTeamPools(sessionId, assignment);
+		audit(`user:${user.id}`, 'team_pools_saved', { sessionId, assignment }, eventId);
+		return { message: 'Team pools saved. Generate a new draft to use them.' };
+	},
+
+	/** Re-plan the bracket games (rooms and rounds) without touching pool play. */
+	planBracket: async ({ request, locals, params }) => {
+		const { eventId, user } = ctx(locals, params);
+		const sessionId = Number((await request.formData()).get('sessionId'));
+		getSession(eventId, sessionId);
+		const warnings = planBrackets(eventId, sessionId, `user:${user.id}`);
+		const adv = advanceBrackets(eventId, `user:${user.id}`, { sessionId });
+		return { message: `Bracket planned.${adv.created.length ? ` Created: ${adv.created.join('; ')}.` : ''}`, warnings: [...warnings, ...adv.problems] };
+	},
+
+	/** Change a planned bracket game's round or room. */
+	saveSlot: async ({ request, locals, params }) => {
+		const { eventId, user } = ctx(locals, params);
+		const f = await request.formData();
+		const sessionId = Number(f.get('sessionId'));
+		getSession(eventId, sessionId);
+		const slotId = Number(f.get('slotId'));
+		const roomId = Number(f.get('roomId')) || null;
+		const roundNo = Number(f.get('roundNo'));
+		const db = getDb();
+		const slot = db.select().from(schema.bracketSlots).where(and(eq(schema.bracketSlots.id, slotId), eq(schema.bracketSlots.sessionId, sessionId))).get();
+		if (!slot) return fail(404, { error: 'Bracket game not found.' });
+		if (!Number.isInteger(roundNo) || roundNo < 1) return fail(400, { error: 'Choose a round.' });
+		if (slot.matchId) {
+			if (startedMatchIds(sessionId).has(slot.matchId)) return fail(400, { error: 'That game has started; it can no longer move.' });
+			const s = loadSchedule(eventId, sessionId);
+			const next = s.matches.map((m) => (m.id === slot.matchId ? { ...m, roundNo, roomId: roomId ?? m.roomId } : m));
+			const errs = editErrors(eventId, sessionId, next);
+			if (errs.length) return fail(400, { error: errs.join(' ') });
+			db.update(schema.matches).set({ roundNo, ...(roomId ? { roomId } : {}) }).where(eq(schema.matches.id, slot.matchId)).run();
+		}
+		db.update(schema.bracketSlots).set({ roundNo, roomId }).where(eq(schema.bracketSlots.id, slotId)).run();
+		audit(`user:${user.id}`, 'bracket_slot_moved', { slotId, roundNo, roomId }, eventId);
+		return { message: 'Bracket game moved.' };
+	},
+
+	/** Create bracket games now from the current standings, even if some pool games are unfinished. */
+	seedNow: async ({ request, locals, params }) => {
+		const { eventId, user } = ctx(locals, params, false);
+		const sessionId = Number((await request.formData()).get('sessionId'));
+		getSession(eventId, sessionId);
+		const adv = advanceBrackets(eventId, `user:${user.id}`, { sessionId, force: true });
+		audit(`user:${user.id}`, 'bracket_seeded_manually', { sessionId, ...adv }, eventId);
+		return { message: adv.created.length ? `Created: ${adv.created.join('; ')}.` : 'No bracket games could be created yet.', warnings: [...adv.waiting, ...adv.problems] };
 	},
 
 	saveMatch: async ({ request, locals, params }) => {

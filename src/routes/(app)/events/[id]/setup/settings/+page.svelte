@@ -6,10 +6,15 @@
 	const r = $derived(data.rules);
 	const conf = $derived(data.event.confirmations);
 	const criteria = [
+		{ v: 'winPct', l: 'Win/loss ratio' },
 		{ v: 'roundsWon', l: 'Most rounds won' },
 		{ v: 'totalPoints', l: 'Total points (counting games)' },
 		{ v: 'headToHead', l: 'Head-to-head among tied teams' }
 	];
+	const divisionNames = $derived([...new Set(data.event.classifications.map((c: string) => r.awards.divisions[c] ?? c))]);
+	const fmtOf = (d: string) => r.format.divisions[d];
+	let types = $state<Record<string, string>>({});
+	const typeOf = (d: string) => types[d] ?? (fmtOf(d)?.type === 'bracket' ? 'bracket' : 'round_robin');
 	const fmtWhen = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 </script>
 
@@ -121,8 +126,62 @@
 		<fieldset class="card">
 			<legend><h3>Team awards {@render badge('teamAwards')}</h3></legend>
 			<div class="grid cols-3">
-				<div class="field"><label for="teamPlaces">Team places per award division</label><input id="teamPlaces" name="teamPlaces" type="number" min="1" max="10" value={r.awards.teamPlaces} /></div>
+				<div class="field"><label for="teamPlaces">Team places per award division (overall)</label><input id="teamPlaces" name="teamPlaces" type="number" min="1" max="10" value={r.awards.teamPlaces} /></div>
 			</div>
+			<h3 style="margin-top: 12px">Classification awards {@render badge('classAwards')}</h3>
+			<div class="grid cols-3">
+				<div class="field"><label for="classPlaces">Places in each classification</label><input id="classPlaces" name="classPlaces" type="number" min="0" max="10" value={r.awards.classPlaces} /><span class="hint">2 = 1st and 2nd in 1A, 2A, 3A… ordered by the division's final places.</span></div>
+			</div>
+		</fieldset>
+
+		<fieldset class="card">
+			<legend><h3>Tournament format {@render badge('format')}</h3></legend>
+			<p class="muted small">Round robin: every counting game decides the places. Bracket: the first rounds are pool play; pool play seeds a bracket (1 v 4, 2 v 3, then the final and 3rd-place game); the bracket decides the top places and pool play orders everyone else. Bracket games are created automatically as soon as their teams are known.</p>
+			{#each divisionNames as d (d)}
+				{@const fm = fmtOf(d)}
+				<div class="format-row">
+					<div class="field">
+						<label for="fmt-{d}">{d}</label>
+						<select id="fmt-{d}" name="fmt:{d}:type" value={typeOf(d)} onchange={(e) => (types[d] = e.currentTarget.value)}>
+							<option value="round_robin">Round robin</option>
+							<option value="bracket">Pool play, then a bracket</option>
+						</select>
+					</div>
+					{#if typeOf(d) === 'bracket'}
+						<div class="field"><label for="sr-{d}">Pool-play rounds</label><input id="sr-{d}" name="fmt:{d}:seedingRounds" type="number" min="1" max="20" value={fm?.seedingRounds ?? 3} /></div>
+						<div class="field">
+							<label for="bs-{d}">Bracket size</label>
+							<select id="bs-{d}" name="fmt:{d}:size" value={String(fm?.bracketSize ?? 4)}>
+								<option value="2">2 (final only)</option>
+								<option value="4">4 (semifinals)</option>
+								<option value="8">8 (quarterfinals)</option>
+							</select>
+						</div>
+						<div class="field">
+							<label for="sd-{d}">Seeding</label>
+							<select id="sd-{d}" name="fmt:{d}:seeding" value={fm?.seeding ?? 'standings'}>
+								<option value="standings">By pool-play results</option>
+								<option value="poolWinnersFirst">Pool winners first</option>
+							</select>
+						</div>
+						<label class="check"><input type="checkbox" name="fmt:{d}:third" checked={fm?.thirdPlaceGame ?? true} /> 3rd-place game</label>
+						<label class="check"><input type="checkbox" name="fmt:{d}:indiv" checked={fm?.bracketCountsForIndividuals ?? true} /> Bracket games count for individuals</label>
+						<label class="check"><input type="checkbox" name="fmt:{d}:fill" checked={fm?.fillNonCounters ?? true} /> Other teams play non-counters</label>
+					{/if}
+				</div>
+			{/each}
+			<p><strong>Bracket seeding order</strong></p>
+			<div class="grid cols-3">
+				{#each [1, 2, 3] as n (n)}
+					<div class="field">
+						<label for="seed{n}">{n === 1 ? 'First' : 'Then'}</label>
+						<select id="seed{n}" name="seed{n}" value={r.format.seedingOrder[n - 1]}>
+							{#each criteria as c (c.v)}<option value={c.v}>{c.l}</option>{/each}
+						</select>
+					</div>
+				{/each}
+			</div>
+			<p class="muted small">Division names come from the table below; save after renaming a division, then set its format.</p>
 		</fieldset>
 
 		<fieldset class="card">
@@ -265,5 +324,16 @@
 	.versions li {
 		padding: 6px 0;
 		border-bottom: 1px solid var(--border);
+	}
+	.format-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 16px;
+		align-items: end;
+		padding: 8px 0;
+		border-bottom: 1px solid var(--border);
+	}
+	.format-row .field {
+		margin: 0;
 	}
 </style>

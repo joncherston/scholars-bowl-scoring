@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import type { SessionUser } from './auth';
 import { getDb, schema } from './db';
 import { ingestEvents, STAFF_TYPES, type IngestResult } from './ingest';
+import { scheduleBracketAdvance } from './bracket';
 
 /** Record a head-scorekeeper action (approve, correction, …) in a round's log. */
 export function staffEvent(user: SessionUser, eventId: number, matchId: number, body: EventBody): IngestResult {
@@ -31,5 +32,6 @@ export function staffEvent(user: SessionUser, eventId: number, matchId: number, 
 		},
 		[{ id: crypto.randomUUID(), matchId, body }]
 	);
+	scheduleBracketAdvance(eventId);
 	return res;
 }

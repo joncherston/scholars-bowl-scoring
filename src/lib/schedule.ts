@@ -29,6 +29,9 @@ export interface SchedMatch {
 	poolKey?: string | null;
 	/** Scoring has started; the match cannot be moved or deleted. */
 	locked?: boolean;
+	stage?: 'pool' | 'bracket';
+	slot?: string | null;
+	division?: string | null;
 }
 
 export interface PoolDef {
@@ -296,7 +299,7 @@ export function validateSchedule({ teams, rooms, roundCount, matches }: Validate
 					teamIds: [a.id, b.id],
 					matchIds: ids(m)
 				});
-			if (m.counts && a && b && a.poolKey !== b.poolKey)
+			if (m.counts && m.stage !== 'bracket' && a && b && a.poolKey !== b.poolKey)
 				issues.push({ level: 'warning', message: `Round ${r}: ${a.name} vs ${b.name} counts, but they are in different pools.`, roundNo: r, matchIds: ids(m) });
 			for (const t of [a, b])
 				if (t?.lastRound && r > t.lastRound)
@@ -311,7 +314,7 @@ export function validateSchedule({ teams, rooms, roundCount, matches }: Validate
 		if (members.length < 2) continue;
 		const games = new Map(members.map((t) => [t.id, 0]));
 		const pairCount = new Map<string, number>();
-		for (const m of matches.filter((m) => m.counts)) {
+		for (const m of matches.filter((m) => m.counts && m.stage !== 'bracket')) {
 			if (games.has(m.teamA) && games.has(m.teamB)) {
 				games.set(m.teamA, games.get(m.teamA)! + 1);
 				games.set(m.teamB, games.get(m.teamB)! + 1);

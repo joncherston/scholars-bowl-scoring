@@ -1,4 +1,5 @@
 import {
+	classAwards,
 	computeRound,
 	computeStandings,
 	isFinalStatus,
@@ -14,7 +15,7 @@ import { asc, eq, inArray } from 'drizzle-orm';
 import { getDb, schema } from './db';
 import { currentRuleVersion, getEvent, listRooms, listSessions } from './events';
 import { deviceGaps, matchEvents, rulesForMatch } from './ingest';
-import { loadSchedule, poolLabel, sessionPools } from './schedule';
+import { loadSchedule, poolLabel, poolOf, sessionPools } from './schedule';
 import { listTeams, playerDisplayName } from './teams';
 
 export interface LiveMatch {
@@ -26,6 +27,9 @@ export interface LiveMatch {
 	teamA: number;
 	teamB: number;
 	counts: boolean;
+	stage: 'pool' | 'bracket';
+	slot: string | null;
+	division: string | null;
 	ruleVersion: number | null;
 	result: RoundResult;
 	lastEventAt: string | null;
@@ -102,7 +106,7 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 		.filter((t) => t.sessionId && allSessionIds.includes(t.sessionId))
 		.map((t) => {
 			const pools = poolsBySession.get(t.sessionId!) ?? [];
-			const pool = pools.find((p) => p.classifications.includes(t.classification));
+			const pool = poolOf(pools, t);
 			return {
 				id: String(t.id),
 				name: t.name,
@@ -110,7 +114,7 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 				classification: t.classification,
 				sessionId: String(t.sessionId),
 				poolId: pool ? String(pool.id) : null,
-				poolName: poolLabel(pools, t.classification),
+				poolName: poolLabel(pools, t),
 				sessionName: allSessions.find((s) => s.id === t.sessionId)?.name,
 				schoolName: t.schoolName,
 				schoolDisplayName: t.schoolDisplayName,
@@ -139,6 +143,9 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 			teamA: m.teamAId,
 			teamB: m.teamBId,
 			counts: m.counts,
+			stage: m.stage,
+			slot: m.bracketSlot,
+			division: m.division,
 			ruleVersion: m.ruleVersionId ? rv.version : null,
 			result: computeRound(events, rv.settings),
 			lastEventAt: events.length ? (events[events.length - 1].serverTs ?? null) : null,
@@ -153,13 +160,14 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 	// A withdrawn team stays in the standings once it has a counting game played or forfeited.
 	const hasCountingResult = (teamId: string) =>
 		allMatches.some((m) => m.counts && (String(m.teamA) === teamId || String(m.teamB) === teamId) && (m.result.status === 'submitted' || isFinalStatus(m.result.status)));
+	const resolutions = db.select().from(schema.tieResolutions).where(eq(schema.tieResolutions.eventId, eventId)).all().filter((r) => r.active);
 	const standingInput = {
 		teams: teams.filter((t) => !t.withdrawn || hasCountingResult(t.id)),
-		matches: allMatches.map((m) => ({ id: String(m.id), sessionId: String(m.sessionId), roundNo: m.roundNo, teamA: String(m.teamA), teamB: String(m.teamB), counts: m.counts })),
+		matches: allMatches.map((m) => ({ id: String(m.id), sessionId: String(m.sessionId), roundNo: m.roundNo, teamA: String(m.teamA), teamB: String(m.teamB), counts: m.counts, stage: m.stage, slot: m.slot })),
 		outcomes,
-		rules
+		rules,
+		seedResolutions: resolutions.filter((r) => r.kind === 'team' && r.groupKey.startsWith('seed:')).map((r) => ({ groupKey: r.groupKey, ordered: r.ordered }))
 	};
-	const resolutions = db.select().from(schema.tieResolutions).where(eq(schema.tieResolutions.eventId, eventId)).all().filter((r) => r.active);
 	// Divisions in the event's classification order (by their first classification).
 	const classOrder = (teamId: string) => {
 		const i = event.classifications.indexOf(teams.find((t) => t.id === teamId)?.classification ?? '');
@@ -217,25 +225,31 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 	for (const g of provisional.individuals) for (const r of g.rows) teamOfPlayer.set(r.playerId, r.teamId);
 	const settled = (teamIds: string[]) =>
 		allMatches.filter((m) => m.counts && (teamIds.includes(String(m.teamA)) || teamIds.includes(String(m.teamB)))).every((m) => isFinalStatus(m.result.status));
+	// Seeds only depend on pool play (submitted results are enough to seed).
+	const poolPlayDone = (teamIds: string[]) =>
+		allMatches
+			.filter((m) => m.counts && m.stage !== 'bracket' && (teamIds.includes(String(m.teamA)) || teamIds.includes(String(m.teamB))))
+			.every((m) => m.result.status === 'submitted' || isFinalStatus(m.result.status));
 	const played = (teamIds: string[]) => teamIds.some((id) => (provisional.records[id]?.played ?? 0) > 0);
 	for (const f of provisional.flags) {
 		if (f.kind === 'fractional_points' || f.kind === 'unresolved_round_tie') continue; // already flagged per round
-		if (f.kind === 'team_tie' || f.kind === 'individual_tie') {
+		if (f.kind === 'team_tie' || f.kind === 'individual_tie' || f.kind === 'seed_tie') {
 			const teamIds = f.teamIds ?? [...new Set((f.playerIds ?? []).map((p) => teamOfPlayer.get(p)!).filter(Boolean))];
 			if (!played(teamIds)) continue;
-			if (!settled(teamIds) && !f.resolved) {
+			const ready = f.kind === 'seed_tie' ? poolPlayDone(teamIds) : settled(teamIds);
+			if (!ready && !f.resolved) {
 				flags.push({ level: 'info', kind: `${f.kind}_provisional`, message: `Currently ${f.message.replace(/^([^:]+): /, '$1: ')} (games still to finish or approve)` });
 				continue;
 			}
 		}
-		const isTie = f.kind === 'team_tie' || f.kind === 'individual_tie';
+		const isTie = f.kind === 'team_tie' || f.kind === 'individual_tie' || f.kind === 'seed_tie';
 		if (f.resolved) flags.push({ level: 'info', kind: `${f.kind}_resolved`, message: `${f.message} — resolved: ${f.resolved}` });
 		else
 			flags.push({
 				level: isTie ? 'error' : f.kind === 'division_spans_sessions' ? 'warning' : 'info',
 				kind: f.kind,
 				message: f.message,
-				tie: isTie ? { kind: f.kind === 'team_tie' ? 'team' : 'individual', groupKey: f.groupKey!, ids: (f.teamIds ?? f.playerIds)! } : undefined
+				tie: isTie ? { kind: f.kind === 'individual_tie' ? 'individual' : 'team', groupKey: f.groupKey!, ids: (f.teamIds ?? f.playerIds)! } : undefined
 			});
 	}
 	// Schedule problems in games that are already final (approved or forfeited) can no longer be acted on.
@@ -260,6 +274,9 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 		}))
 		.filter((t) => t.games.length);
 
+	// Bracket games still waiting for their teams.
+	const slots = sessionIds.length ? db.select().from(schema.bracketSlots).where(inArray(schema.bracketSlots.sessionId, sessionIds)).all() : [];
+
 	return {
 		event,
 		rules,
@@ -269,6 +286,8 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 		matches,
 		provisional,
 		final,
+		classAwards: { provisional: classAwards(provisional.divisions, teams), final: classAwards(final.divisions, teams) },
+		slots,
 		playerNames,
 		flags,
 		withdrawn

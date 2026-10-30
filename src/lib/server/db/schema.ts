@@ -47,6 +47,11 @@ export const events = sqliteTable('events', {
 	confirmations: text('confirmations', { mode: 'json' }).$type<Record<string, { by: string; at: string }>>().notNull().default({}),
 	classifications: text('classifications', { mode: 'json' }).$type<string[]>().notNull(),
 	settingsSource: text('settings_source'),
+	/** The registration website's event this event was created from (automatic sync). */
+	wpEventId: integer('wp_event_id'),
+	wpSyncedAt: text('wp_synced_at'),
+	/** Public results: show individual leaderboards? off (staff only), initials ("A. Lee"), or full names. */
+	publicIndividuals: text('public_individuals', { enum: ['off', 'initials', 'full'] }).notNull().default('off'),
 	createdAt: createdAt()
 });
 
@@ -162,6 +167,11 @@ export const teams = sqliteTable(
 		arrivedAt: text('arrived_at'),
 		arrivedBy: text('arrived_by'),
 		withdrawn: integer('withdrawn', { mode: 'boolean' }).notNull().default(false),
+		/** Pool for this team when a classification is split into several pools (overrides the classification's pool). */
+		poolId: integer('pool_id'),
+		/** Check-in staff confirmed the roster (pre-filled from registration). */
+		rosterConfirmedAt: text('roster_confirmed_at'),
+		rosterConfirmedBy: text('roster_confirmed_by'),
 		notes: text('notes'),
 		createdAt: createdAt()
 	},
@@ -175,6 +185,8 @@ export const players = sqliteTable('players', {
 	lastName: text('last_name').notNull(),
 	preferredName: text('preferred_name'),
 	grade: text('grade'),
+	/** Student ID on the registration website, for re-syncing a roster without duplicates. */
+	wpStudentId: integer('wp_student_id'),
 	createdAt: createdAt()
 });
 
@@ -204,11 +216,41 @@ export const matches = sqliteTable(
 		teamBId: integer('team_b_id').notNull().references(() => teams.id),
 		counts: integer('counts', { mode: 'boolean' }).notNull().default(true),
 		poolId: integer('pool_id').references(() => pools.id),
+		/** pool: pool play / round robin. bracket: a division's bracket game. */
+		stage: text('stage', { enum: ['pool', 'bracket'] }).notNull().default('pool'),
+		/** Bracket position (F, 3P, SF1, SF2, QF1–QF4) or X1, X2… for a non-counter during bracket rounds. */
+		bracketSlot: text('bracket_slot'),
+		/** Award division of a bracket game. */
+		division: text('division'),
 		/** Settings version the round was scored under; set when scoring starts. */
 		ruleVersionId: integer('rule_version_id').references(() => ruleVersions.id),
 		createdAt: createdAt()
 	},
 	(t) => [index('matches_session').on(t.sessionId, t.roundNo)]
+);
+
+/**
+ * A planned game whose teams are decided by earlier results: "Seed 1 v Seed 4", "Winner SF1 v Winner SF2".
+ * The real match is created (and linked) once both teams are known.
+ */
+export const bracketSlots = sqliteTable(
+	'bracket_slots',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		sessionId: integer('session_id').notNull().references(() => sessions.id),
+		division: text('division').notNull(),
+		slot: text('slot').notNull(),
+		label: text('label').notNull(),
+		roundNo: integer('round_no').notNull(),
+		roomId: integer('room_id').references(() => rooms.id),
+		/** "seed:1", "winner:SF1", "loser:SF1". */
+		sourceA: text('source_a').notNull(),
+		sourceB: text('source_b').notNull(),
+		counts: integer('counts', { mode: 'boolean' }).notNull().default(true),
+		matchId: integer('match_id').references(() => matches.id),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('bracket_slots_unique').on(t.sessionId, t.division, t.slot)]
 );
 
 /** The append-only scoring log. Rows are never updated or deleted. */

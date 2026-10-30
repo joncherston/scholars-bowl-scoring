@@ -18,6 +18,16 @@
 	const badMatch = $derived(new Set(errors.flatMap((i) => i.matchIds ?? [])));
 	const sameSchool = $derived(new Set(notices.flatMap((i) => i.matchIds ?? [])));
 	const cell = (r: number, roomId: number) => data.matches?.find((m) => m.roundNo === r && m.roomId === roomId);
+	/** A planned bracket game whose teams aren't known yet. */
+	const slotCell = (r: number, roomId: number) => data.slots?.find((x) => !x.matchId && x.roundNo === r && x.roomId === roomId);
+	const slotOfMatch = (id: number | undefined) => data.slots?.find((x) => x.matchId === id);
+	const src = (v: string) => {
+		const [k, ref] = v.split(':');
+		if (k === 'seed') return `Seed ${ref}`;
+		const l = data.slots?.find((x) => x.slot === ref)?.label ?? ref;
+		return `${k === 'winner' ? 'W' : 'L'} ${l.replace('Semifinal', 'SF').replace('Quarterfinal', 'QF')}`;
+	};
+	const unplacedSlots = $derived(data.slots?.filter((x) => !x.matchId && !x.roomId) ?? []);
 	const fmtTime = (t?: string) => {
 		if (!t) return '';
 		const [h, m] = t.split(':').map(Number);
@@ -166,6 +176,21 @@
 					<button class="btn secondary" type="submit">Save pools</button>
 				</form>
 
+				<details class="card team-pools">
+					<summary><h3 style="display: inline">Split a classification into pools</h3> <span class="muted small">(optional, e.g. Private Pools A, B, C)</span></summary>
+					<form method="POST" action="?/teamPools" use:enhance>
+						<input type="hidden" name="sessionId" value={data.sessionId} />
+						<p class="muted small">Type a pool name for each team to split. Leave blank to use the classification's pool above. Teams with the same pool name play each other.</p>
+						<div class="pools">
+							{#each data.teams.filter((t) => !t.withdrawn) as t (t.id)}
+								<label for="tp_{t.id}">{t.name} <span class="muted small">({t.classification})</span></label>
+								<input id="tp_{t.id}" name="teamPool_{t.id}" type="text" maxlength="40" value={data.pools.find((p) => p.id === t.poolId && !p.classifications.length)?.name ?? ''} />
+							{/each}
+						</div>
+						<button class="btn secondary" type="submit">Save team pools</button>
+					</form>
+				</details>
+
 				<form method="POST" action="?/generate" class="card" use:enhance onsubmit={(e) => { if (data.matches?.length && !confirm('Replace the current draft with a newly generated one?')) e.preventDefault(); }}>
 					<input type="hidden" name="sessionId" value={data.sessionId} />
 					<h3>Generate a draft</h3>
@@ -242,10 +267,18 @@
 											<span class="vs">vs</span>
 											<span class="t">{teamName(m.teamB)}</span>
 											<span class="tags">
+												{#if slotOfMatch(m.id)}<span class="badge info">{slotOfMatch(m.id)?.label}</span>{/if}
 												{#if !m.counts}<span class="badge">Non-counter</span>{/if}
 												{#if m.locked}<span class="badge info">Scored</span>{/if}
 											</span>
 										</button>
+									{:else if slotCell(rn, room.id)}
+										{@const sl = slotCell(rn, room.id)!}
+										<div class="game planned" class:nc={!sl.counts} aria-label="Round {rn}, {room.name}: {sl.label}, {src(sl.sourceA)} versus {src(sl.sourceB)}">
+											<span class="t">{sl.label}</span>
+											<span class="vs">{src(sl.sourceA)} v {src(sl.sourceB)}</span>
+											<span class="tags"><span class="badge info">{sl.division}</span></span>
+										</div>
 									{:else if editable}
 										<button type="button" class="empty" onclick={() => openEdit(rn, room.id)} aria-label="Add a game in round {rn}, {room.name}">+</button>
 									{/if}
@@ -258,6 +291,55 @@
 			</table>
 		</div>
 		{#if editable}<p class="muted small">Drag a game onto another cell to move it (or swap with the game there). Click a game to edit it.</p>{/if}
+
+		{#if data.slots?.length}
+			<section class="card" style="margin-top: 16px">
+				<div class="row between">
+					<h3>Bracket games</h3>
+					<div class="row">
+						{#if canEdit}
+							<form method="POST" action="?/planBracket" use:enhance onsubmit={(e) => { if (!confirm('Re-plan the bracket games that have not started (rounds and rooms)?')) e.preventDefault(); }}>
+								<input type="hidden" name="sessionId" value={data.sessionId} />
+								<button class="btn secondary small" type="submit">Re-plan bracket</button>
+							</form>
+						{/if}
+						<form method="POST" action="?/seedNow" use:enhance onsubmit={(e) => { if (!confirm('Create the bracket games now from the current standings, even if some pool games are not finished?')) e.preventDefault(); }}>
+							<input type="hidden" name="sessionId" value={data.sessionId} />
+							<button class="btn secondary small" type="submit">Create bracket games now</button>
+						</form>
+					</div>
+				</div>
+				<p class="muted small">Bracket games are created automatically once their teams are known: seeds when the division's pool games are in, winners and losers when each bracket game is submitted. You can still edit any game that hasn't started.</p>
+				{#if unplacedSlots.length}<div class="alert error" role="alert">{unplacedSlots.length} bracket game(s) have no room. Pick a room below.</div>{/if}
+				<table class="data">
+					<thead><tr><th>Division</th><th>Game</th><th>Teams</th><th>Round</th><th>Room</th><th>Status</th></tr></thead>
+					<tbody>
+						{#each data.slots as sl (sl.id)}
+							{@const m = data.matches.find((x) => x.id === sl.matchId)}
+							<tr>
+								<td>{sl.division}</td>
+								<td>{sl.label}</td>
+								<td>{m ? `${teamName(m.teamA)} v ${teamName(m.teamB)}` : `${src(sl.sourceA)} v ${src(sl.sourceB)}`}</td>
+								<td colspan="2">
+									{#if canEdit && !m?.locked}
+										<form method="POST" action="?/saveSlot" use:enhance class="row slot-form">
+											<input type="hidden" name="sessionId" value={data.sessionId} />
+											<input type="hidden" name="slotId" value={sl.id} />
+											<select name="roundNo" value={sl.roundNo} aria-label="Round for {sl.label}">{#each rounds as r (r)}<option value={r}>{r}</option>{/each}</select>
+											<select name="roomId" value={sl.roomId ?? ''} aria-label="Room for {sl.label}"><option value="">—</option>{#each data.rooms as r (r.id)}<option value={r.id}>{r.name}</option>{/each}</select>
+											<button class="btn secondary small" type="submit">Save</button>
+										</form>
+									{:else}
+										Round {sl.roundNo} · {data.rooms.find((r) => r.id === sl.roomId)?.name ?? 'no room'}
+									{/if}
+								</td>
+								<td>{m ? (m.locked ? 'Started' : 'Ready') : 'Waiting for results'}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</section>
+		{/if}
 	{/if}
 </div>
 
@@ -453,5 +535,16 @@
 	}
 	.modal::backdrop {
 		background: rgb(18 32 71 / 45%);
+	}
+	.game.planned {
+		border-style: dashed;
+		background: var(--surface-2);
+		color: var(--muted);
+	}
+	.slot-form select {
+		max-width: 140px;
+	}
+	.team-pools summary {
+		cursor: pointer;
 	}
 </style>

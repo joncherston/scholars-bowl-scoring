@@ -1,3 +1,4 @@
+import { scheduleBracketAdvance } from '$lib/server/bracket';
 import { ingestEvents, ROOM_TYPES, type IncomingEvent } from '$lib/server/ingest';
 import { error, json } from '@sveltejs/kit';
 
@@ -26,5 +27,6 @@ export async function POST({ locals, request }) {
 		},
 		events
 	);
+	if (events.some((e) => e?.body?.type === 'submitted')) scheduleBracketAdvance(a.room.eventId);
 	return json({ results });
 }
