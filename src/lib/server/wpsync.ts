@@ -326,7 +326,8 @@ async function doSync(opts: { wpEventId?: number; reason?: string }): Promise<Sy
 	if (!s?.enabled || !s.token || !s.autoSync) return { ...report, ok: false, error: 'Automatic sync is off.' };
 	try {
 		const events = await wpEvents(s);
-		const today = new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10);
+		// Only events from today on become new scoring events (past events are never created after the fact).
+		const today = new Date(Date.now() - 6 * 3600_000).toISOString().slice(0, 10);
 		const wanted = events.filter((e) => (opts.wpEventId ? e.id === opts.wpEventId : true) && e.date && /^\d{4}-\d{2}-\d{2}/.test(e.date));
 		let backedUp = false;
 		for (const ev of wanted) {
