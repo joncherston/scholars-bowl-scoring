@@ -7,7 +7,37 @@
  */
 
 export type RoundingMode = 'exact' | 'half_up' | 'down';
-export type StandingsCriterion = 'roundsWon' | 'totalPoints' | 'headToHead';
+export type StandingsCriterion = 'roundsWon' | 'winPct' | 'totalPoints' | 'headToHead';
+export type BracketSize = 2 | 4 | 8;
+
+/**
+ * How one award division's tournament is played. Round robin: everyone's counting games decide
+ * places. Bracket: `seedingRounds` pool-play rounds seed a single-elimination bracket of
+ * `bracketSize` teams; the bracket decides places 1..bracketSize and pool play orders the rest.
+ */
+export interface DivisionFormat {
+	type: 'round_robin' | 'bracket';
+	seedingRounds: number;
+	bracketSize: BracketSize;
+	thirdPlaceGame: boolean;
+	/** standings: seeds follow the seeding order. poolWinnersFirst: each pool's winner is seeded ahead of everyone else. */
+	seeding: 'standings' | 'poolWinnersFirst';
+	/** Bracket games count toward individual totals (they always count toward team points). */
+	bracketCountsForIndividuals: boolean;
+	/** Teams outside the bracket play non-counter games during bracket rounds when rooms allow. */
+	fillNonCounters: boolean;
+}
+
+export const DEFAULT_BRACKET_FORMAT: DivisionFormat = {
+	type: 'bracket',
+	seedingRounds: 3,
+	bracketSize: 4,
+	thirdPlaceGame: true,
+	seeding: 'standings',
+	bracketCountsForIndividuals: true,
+	fillNonCounters: true
+};
+export const ROUND_ROBIN_FORMAT: DivisionFormat = { ...DEFAULT_BRACKET_FORMAT, type: 'round_robin' };
 export type IndividualGrouping = 'division' | 'classification' | 'session' | 'overall';
 
 export interface RuleSettings {
@@ -59,6 +89,14 @@ export interface RuleSettings {
 		 * listed is its own division.
 		 */
 		divisions: Record<string, string>;
+		/** Places awarded within each classification (1st and 2nd = 2), ordered by the division's final places. */
+		classPlaces: number;
+	};
+	/** Tournament format per award division (name → format). A division not listed is a round robin. */
+	format: {
+		/** Order used to seed brackets (and break pool-play ties before a bracket). */
+		seedingOrder: StandingsCriterion[];
+		divisions: Record<string, DivisionFormat>;
 	};
 	maxRoundsPerSession: number;
 }
@@ -73,6 +111,8 @@ export const CONFIRM_ITEMS = [
 	{ key: 'teamAwards', label: 'Team award places' },
 	{ key: 'divisions', label: 'Award divisions: which classifications are awarded together (team and individual)' },
 	{ key: 'individualAwards', label: 'Individual award grouping and number of places' },
+	{ key: 'classAwards', label: 'Places awarded in each classification (e.g. 1st and 2nd)' },
+	{ key: 'format', label: 'Tournament format for each division (round robin, or pool play seeding a bracket)' },
 	{ key: 'individualTies', label: 'Individual tie-breaking method' }
 ] as const;
 export type ConfirmKey = (typeof CONFIRM_ITEMS)[number]['key'];
@@ -113,13 +153,22 @@ export const HIGH_SCHOOL_DEFAULTS: RuleSettings = {
 	},
 	roster: { maxPlayers: 6, activePlayers: 4 },
 	standings: { order: ['roundsWon', 'totalPoints', 'headToHead'] },
-	awards: { teamPlaces: 1, individualPlaces: 3, individualGrouping: 'division', divisions: { ...DEFAULT_DIVISIONS } },
+	awards: { teamPlaces: 1, individualPlaces: 3, individualGrouping: 'division', divisions: { ...DEFAULT_DIVISIONS }, classPlaces: 2 },
+	format: { seedingOrder: ['winPct', 'totalPoints', 'headToHead'], divisions: {} },
 	maxRoundsPerSession: 12
 };
 
 export const RULE_TEMPLATES: { id: string; name: string; settings: RuleSettings }[] = [
 	{ id: 'high-school', name: 'SUSCC High School (default)', settings: HIGH_SCHOOL_DEFAULTS }
 ];
+
+/** The format of a division (round robin unless set). */
+export function formatOf(rules: RuleSettings, division: string): DivisionFormat {
+	const f = rules.format?.divisions?.[division];
+	if (!f || f.type !== 'bracket') return ROUND_ROBIN_FORMAT;
+	const size = [2, 4, 8].includes(f.bracketSize) ? f.bracketSize : 4;
+	return { ...DEFAULT_BRACKET_FORMAT, ...f, bracketSize: size as BracketSize, seedingRounds: Math.max(1, Math.trunc(f.seedingRounds || 1)) };
+}
 
 /** Deep-merge saved settings over the defaults so older saved versions stay readable. */
 export function normalizeRules(partial: unknown): RuleSettings {

@@ -66,6 +66,8 @@ const CONFIRM_FIELDS: Record<ConfirmKey, (r: RuleSettings) => unknown> = {
 	teamAwards: (r) => [r.awards.teamPlaces],
 	divisions: (r) => [r.awards.divisions],
 	individualAwards: (r) => [r.awards.individualGrouping, r.awards.individualPlaces],
+	classAwards: (r) => [r.awards.classPlaces],
+	format: (r) => [r.format],
 	individualTies: () => 'flag'
 };
 
