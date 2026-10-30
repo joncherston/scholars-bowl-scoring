@@ -84,6 +84,20 @@ cp data/backups/<snapshot>.db data/scoring.db
 docker compose start app
 ```
 
+## Tournament formats and awards
+
+Each award division (Scoring settings → Tournament format) is either a **round robin** or **pool play, then a bracket**: the first N rounds are pool play (pools can split a classification by team, e.g. Private Pools A, B, C), pool play seeds a 2-, 4- or 8-team bracket (win/loss ratio → total points → head-to-head; seeding ties are flagged for the head scorekeeper), and the bracket decides places 1–4 (or 1–8) while pool play orders everyone else. Generating a draft plans the bracket games with rooms (`bracket_slots`); the real games are created automatically as soon as their teams are known (`src/lib/server/bracket.ts`), re-paired if a correction changes the seeds before they start, and left alone once staff edit them by hand. Teams outside the bracket can play non-counters.
+
+Awards: 1st/2nd (configurable) in each classification, ordered by the division's final places; the overall division winner(s); and all-tournament individual awards per division.
+
+## Website sync (plugin 1.1.0+)
+
+With **Admin → Website connection → Automatic sync** on, an event created on the registration website becomes an event here (sessions, divisions, formats and award places from the website; rooms, round times, staff and scoring rules from the most recent real event), and registrations and student rosters arrive as teams and players. It runs every 10 minutes and right away when the website sends a signed ping to `POST /api/wordpress/notify` (HMAC-SHA256 over `timestamp.body`, keyed with the sha256 of the API token; 5-minute window; replays rejected; no personal data in the ping). Nothing is deleted; teams that have played keep their games; rosters confirmed at check-in are never overwritten; settings changed on the website after scoring starts are reported, not applied.
+
+## Public results
+
+`/results/<event>` (when the event's public switch is on): live match-by-match results, brackets, and team rankings by division and classification. Top individual scorers appear only if the event allows it (first name + last initial, or full name); the default is staff only.
+
 ## Registration import
 
 Teams come from the WordPress registration plugin's **Export to CSV** (WP Admin → Scholars' Bowl → Registrations). The export includes every year's registrations, so the import filters by a "registered on or after" date (default: January 1 of the event's year), flags duplicate sign-ups, matches re-imports on the registration ID, and shows a preview before anything changes. The plugin's `Grade Level` column holds the classification. Payment columns are not imported.
