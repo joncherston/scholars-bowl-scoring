@@ -128,6 +128,8 @@ export interface NewEventInput {
 	classifications: string[];
 	sessions: NewSession[];
 	roomNames: string[];
+	/** Rooms (by name) set aside for byes and practice; their games never count. */
+	practiceRoomNames?: string[];
 	settings: RuleSettings;
 	settingsSource: string;
 }
@@ -156,7 +158,7 @@ export function createEvent(input: NewEventInput, actorName: string): number {
 			pins.add(pin);
 			const [r] = tx
 				.insert(schema.rooms)
-				.values({ eventId: ev.id, name, sortOrder: i, pin, projectorToken: newProjectorToken() })
+				.values({ eventId: ev.id, name, sortOrder: i, pin, projectorToken: newProjectorToken(), practice: !!input.practiceRoomNames?.includes(name) })
 				.returning()
 				.all();
 			roomIds.push(r.id);
@@ -196,7 +198,8 @@ export function copySourceFrom(eventId: number) {
 			roundCount: s.roundCount,
 			roundTimes: s.roundTimes
 		})),
-		roomNames: rooms.map((r) => r.name)
+		roomNames: rooms.map((r) => r.name),
+		practiceRoomNames: rooms.filter((r) => r.practice).map((r) => r.name)
 	};
 }
 

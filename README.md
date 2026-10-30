@@ -88,6 +88,8 @@ docker compose start app
 
 Each award division (Scoring settings → Tournament format) is either a **round robin** or **pool play, then a bracket**: the first N rounds are pool play (pools can split a classification by team, e.g. Private Pools A, B, C), pool play seeds a 2-, 4- or 8-team bracket (win/loss ratio → total points → head-to-head; seeding ties are flagged for the head scorekeeper), and the bracket decides places 1–4 (or 1–8) while pool play orders everyone else. Generating a draft plans the bracket games with rooms (`bracket_slots`); the real games are created automatically as soon as their teams are known (`src/lib/server/bracket.ts`), re-paired if a correction changes the seeds before they start, and left alone once staff edit them by hand. Teams outside the bracket can play non-counters.
 
+**Practice (bye) rooms.** Setup → Rooms → *Practice / bye room* (only while the room has no games). Schedule generation and bracket planning skip those rooms; the room's computer can start its own practice games (`/api/scorer/practice`, room PIN session, two teams from one session, non-counting). Games in a practice room are dropped in `computeLive`, so they never reach standings, individuals, brackets, awards, printed sheets or public results, and scoring them never locks the real schedule. Ordinary schedule edits can't move a game into or out of a practice room.
+
 Awards: 1st/2nd (configurable) in each classification, ordered by the division's final places; the overall division winner(s); and all-tournament individual awards per division.
 
 ## Website sync (plugin 1.1.0+)

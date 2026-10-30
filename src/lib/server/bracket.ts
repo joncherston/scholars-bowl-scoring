@@ -55,7 +55,7 @@ export function planBrackets(
   const rules = currentRuleVersion(eventId).settings;
   const divisions = bracketDivisions(eventId, sessionId, rules);
   const sched = loadSchedule(eventId, sessionId);
-  const rooms = sessionRooms(sessionId);
+  const rooms = sessionRooms(sessionId).filter((r) => !r.practice);
   const started = startedMatchIds(sessionId);
   const warnings: string[] = [];
   let maxRound = sched.session.roundCount;

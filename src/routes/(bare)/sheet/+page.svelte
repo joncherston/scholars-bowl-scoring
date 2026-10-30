@@ -2,6 +2,7 @@
 	import { dev } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { rejectReason, ScorerStore } from '$lib/client/scorer-store.svelte';
+	import PracticeStart from '$lib/components/PracticeStart.svelte';
 	import SheetImport, { type ImportPlan } from '$lib/components/SheetImport.svelte';
 	import { computeRound, type EventBody, type Side } from '$lib/engine';
 	import { formatPoints } from '$lib/engine/points';
@@ -382,7 +383,7 @@
 			}
 			return;
 		}
-		if (submitOpen || importOpen || !ready || !match) return;
+		if (submitOpen || importOpen || practiceOpen || !ready || !match) return;
 		const t = e.target as HTMLElement;
 		if (t.closest?.('input, select, textarea, dialog')) return;
 		if (picker) {
@@ -548,6 +549,12 @@
 
 	// ---------- Import ----------
 	let importOpen = $state(false);
+	let practiceOpen = $state(false);
+	async function practiceStarted(id: number) {
+		await store.refresh();
+		practiceOpen = false;
+		openTab(id);
+	}
 	function openImport() {
 		if (edit && !finishEdit()) return;
 		const why = blockedReason();
@@ -670,8 +677,10 @@
 			<strong>{workbookTitle}</strong>
 			{#if store.state}<span>{store.state.room.name}</span>{/if}
 			{#if store.state?.event.isTest}<span class="practice">Practice event</span>{/if}
+			{#if store.state?.room.practice}<span class="practice">Practice room · scores never count</span>{/if}
 		</div>
 		<div class="tools">
+			{#if store.state?.practice && store.state.matches.length}<button type="button" class="rb" onclick={() => (practiceOpen = true)}>New practice game</button>{/if}
 			<button type="button" class="rb" onclick={openImport} disabled={!match}>Import scores</button>
 			<button type="button" class="rb primary" onclick={openSubmit} disabled={!match || locked}>Submit round</button>
 			<span class="conn {statusClass}" role="status" aria-live="polite">{statusText}</span>
@@ -720,6 +729,11 @@
 
 	{#if !ready}
 		<p class="center">Loading…</p>
+	{:else if store.state?.practice && store.state.matches.length === 0}
+		<div class="empty">
+			<h2>Start a practice game in {store.state.room.name}</h2>
+			<PracticeStart options={store.state.practice} onstarted={practiceStarted} />
+		</div>
 	{:else if !store.state || store.state.matches.length === 0}
 		<div class="empty">
 			<h2>No games scheduled for this room yet</h2>
@@ -830,6 +844,17 @@
 				{:else}
 					<button type="button" class="db primary" onclick={() => closeAlert(false)}>OK</button>
 				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
+
+{#if practiceOpen && store.state?.practice}
+	<div class="overlay" role="dialog" aria-modal="true" aria-labelledby="practice-title">
+		<div class="dialog">
+			<div class="dlg-title" id="practice-title">New practice game</div>
+			<div class="dlg-body col">
+				<PracticeStart options={store.state.practice} onstarted={practiceStarted} oncancel={() => (practiceOpen = false)} />
 			</div>
 		</div>
 	</div>

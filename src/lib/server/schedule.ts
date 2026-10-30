@@ -1,6 +1,6 @@
 import { generateSchedule, type PoolDef, type SchedMatch, type SchedRoom, type SchedTeam } from '$lib/schedule';
 import { error } from '@sveltejs/kit';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
 import { getDb, schema } from './db';
 import { currentRuleVersion, sortClassifications } from './events';
 import { divisionOf, formatOf } from '$lib/engine';
@@ -12,9 +12,10 @@ export function getSession(eventId: number, sessionId: number) {
 	return s;
 }
 
+/** A session's active rooms (practice rooms included; filter on `practice` where games are placed). */
 export function sessionRooms(sessionId: number) {
 	return getDb()
-		.select({ id: schema.rooms.id, name: schema.rooms.name, sortOrder: schema.rooms.sortOrder, moderator: schema.sessionRooms.moderator })
+		.select({ id: schema.rooms.id, name: schema.rooms.name, sortOrder: schema.rooms.sortOrder, moderator: schema.sessionRooms.moderator, practice: schema.rooms.practice })
 		.from(schema.sessionRooms)
 		.innerJoin(schema.rooms, eq(schema.sessionRooms.roomId, schema.rooms.id))
 		.where(and(eq(schema.sessionRooms.sessionId, sessionId), eq(schema.rooms.active, true)))
@@ -45,13 +46,23 @@ export function poolLabel(pools: PoolRow[], team: string | { classification: str
 	return poolOf(pools, t)?.name ?? t.classification;
 }
 
-/** Match IDs in a session that already have scoring events (locked against edits). */
-export function startedMatchIds(sessionId: number): Set<number> {
+/** IDs of an event's practice rooms (games there never count for anything). */
+export function practiceRoomIds(eventId: number): Set<number> {
+	const rows = getDb().select({ id: schema.rooms.id }).from(schema.rooms).where(and(eq(schema.rooms.eventId, eventId), eq(schema.rooms.practice, true))).all();
+	return new Set(rows.map((r) => r.id));
+}
+
+/**
+ * Match IDs in a session that already have scoring events (locked against edits).
+ * Practice-room games are left out unless asked for: scoring practice never locks the real schedule.
+ */
+export function startedMatchIds(sessionId: number, opts: { includePractice?: boolean } = {}): Set<number> {
 	const rows = getDb()
 		.select({ matchId: schema.scoreEvents.matchId })
 		.from(schema.scoreEvents)
 		.innerJoin(schema.matches, eq(schema.scoreEvents.matchId, schema.matches.id))
-		.where(eq(schema.matches.sessionId, sessionId))
+		.innerJoin(schema.rooms, eq(schema.matches.roomId, schema.rooms.id))
+		.where(opts.includePractice ? eq(schema.matches.sessionId, sessionId) : and(eq(schema.matches.sessionId, sessionId), eq(schema.rooms.practice, false)))
 		.groupBy(schema.scoreEvents.matchId)
 		.all();
 	return new Set(rows.map((r) => r.matchId));
@@ -73,14 +84,22 @@ export function loadSchedule(eventId: number, sessionId: number) {
 		arrived: !!t.arrivedAt,
 		lastRound: poolOf(pools, t)?.rounds ?? null
 	}));
-	const rooms = sessionRooms(sessionId);
-	const started = startedMatchIds(sessionId);
-	const matches = getDb()
-		.select()
-		.from(schema.matches)
-		.where(eq(schema.matches.sessionId, sessionId))
-		.orderBy(asc(schema.matches.roundNo))
-		.all()
+	// Practice rooms are kept apart: the schedule, its checks and the brackets only see real rooms and games.
+	const rooms = sessionRooms(sessionId).filter((r) => !r.practice);
+	const practiceIds = practiceRoomIds(eventId);
+	const practiceRooms = getDb()
+		.select({ id: schema.rooms.id, name: schema.rooms.name })
+		.from(schema.rooms)
+		.where(and(eq(schema.rooms.eventId, eventId), eq(schema.rooms.practice, true), eq(schema.rooms.active, true)))
+		.orderBy(asc(schema.rooms.sortOrder))
+		.all();
+	const started = startedMatchIds(sessionId, { includePractice: true });
+	const allRows = getDb().select().from(schema.matches).where(eq(schema.matches.sessionId, sessionId)).orderBy(asc(schema.matches.roundNo), asc(schema.matches.id)).all();
+	const practiceMatches = allRows
+		.filter((m) => practiceIds.has(m.roomId))
+		.map((m) => ({ id: m.id, roundNo: m.roundNo, roomId: m.roomId, teamA: m.teamAId, teamB: m.teamBId, started: started.has(m.id) }));
+	const matches = allRows
+		.filter((m) => !practiceIds.has(m.roomId))
 		.map((m) => ({
 			id: m.id,
 			roundNo: m.roundNo,
@@ -96,7 +115,7 @@ export function loadSchedule(eventId: number, sessionId: number) {
 		})) satisfies SchedMatch[];
 	const slots = getDb().select().from(schema.bracketSlots).where(eq(schema.bracketSlots.sessionId, sessionId)).orderBy(asc(schema.bracketSlots.roundNo), asc(schema.bracketSlots.id)).all();
 	const classifications = sortClassifications([...new Set([...session.classifications, ...teams.map((t) => t.classification)])]);
-	return { session, pools, teams, rooms, matches, classifications, slots };
+	return { session, pools, teams, rooms, matches, classifications, slots, practiceRooms, practiceMatches };
 }
 
 /** Replace the session's pools from a classification → pool-name map (same name = merged). */
@@ -157,8 +176,12 @@ export function generateDraft(eventId: number, sessionId: number, opts: DraftOpt
 	const schedTeams = playing.map((t) => ({ ...t, poolKey: poolKeyFor(pools, t) }));
 	const res = generateSchedule({ pools: poolDefs, teams: schedTeams, rooms: rooms as SchedRoom[], rounds: opts.rounds, fillByesWithNonCounters: opts.fillByesWithNonCounters });
 	const db = getDb();
+	const practiceIds = [...practiceRoomIds(eventId)];
 	db.transaction((tx) => {
-		tx.delete(schema.matches).where(eq(schema.matches.sessionId, sessionId)).run();
+		// Practice-room games stay; everything else is replaced.
+		tx.delete(schema.matches)
+			.where(practiceIds.length ? and(eq(schema.matches.sessionId, sessionId), notInArray(schema.matches.roomId, practiceIds)) : eq(schema.matches.sessionId, sessionId))
+			.run();
 		for (const m of res.matches)
 			tx.insert(schema.matches)
 				.values({

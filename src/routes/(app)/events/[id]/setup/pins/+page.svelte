@@ -13,6 +13,7 @@
 		<div class="pincard">
 			<div class="ev">{data.event.name}{data.event.isTest ? ' — PRACTICE' : ''}</div>
 			<div class="room">{r.name}</div>
+			{#if r.practice}<div class="practice">Practice / bye room — scores here never count</div>{/if}
 			<div class="lbl">Scorer sign-in</div>
 			<div class="url">{data.origin.replace(/^https?:\/\//, '')}/room</div>
 			<div class="lbl">Room PIN</div>
@@ -34,6 +35,11 @@
 		text-align: center;
 		break-inside: avoid;
 		background: #fff;
+	}
+	.practice {
+		margin-top: 4px;
+		font-weight: 700;
+		color: #6b5000;
 	}
 	.ev {
 		font-size: 0.85rem;

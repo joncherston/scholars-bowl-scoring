@@ -24,7 +24,7 @@ export function load({ locals, params, url, depends }) {
 	const session = live.sessions[0];
 	const teamName = (id: string | number) => live.teams.find((t) => t.id === String(id))?.name ?? '?';
 	const usedRooms = new Set(live.matches.map((m) => m.roomId));
-	const rooms = sessionRooms(sessionId).filter((r) => usedRooms.has(r.id) || usedRooms.size === 0).map((r) => {
+	const rooms = sessionRooms(sessionId).filter((r) => !r.practice && (usedRooms.has(r.id) || usedRooms.size === 0)).map((r) => {
 		const row = live.rooms.find((x) => x.id === r.id)!;
 		const ms = live.matches.filter((m) => m.roomId === r.id).sort((a, b) => a.roundNo - b.roundNo);
 		const current = ms.find((m) => m.result.status === 'in_progress' || m.result.status === 'ended') ?? ms.find((m) => m.result.status === 'submitted') ?? ms.find((m) => m.result.status === 'not_started');

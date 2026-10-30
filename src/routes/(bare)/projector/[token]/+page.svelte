@@ -7,7 +7,7 @@
 
 	let { data } = $props();
 	interface State {
-		room: { name: string };
+		room: { name: string; practice?: boolean };
 		event: { name: string; isTest: boolean };
 		match: ScorerMatch | null;
 		next: { roundNo: number; teams: { A: string; B: string } } | null;
@@ -59,6 +59,7 @@
 
 <div class="proj">
 	{#if st?.event.isTest}<div class="test-banner">PRACTICE / TEST EVENT</div>{/if}
+	{#if st?.room.practice}<div class="test-banner">PRACTICE ROOM · scores here never count</div>{/if}
 	{#if err}
 		<p class="msg">{err}</p>
 	{:else if !st}

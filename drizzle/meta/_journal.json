@@ -36,6 +36,13 @@
       "when": 1793324838328,
       "tag": "0004_brackets_and_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793328178034,
+      "tag": "0005_practice_rooms",
+      "breakpoints": true
     }
   ]
 }

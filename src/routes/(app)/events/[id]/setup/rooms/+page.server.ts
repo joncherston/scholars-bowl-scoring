@@ -48,6 +48,26 @@ export const actions = {
 		if (room.active) getDb().delete(schema.authSessions).where(eq(schema.authSessions.roomId, room.id)).run();
 		audit(`user:${admin.id}`, room.active ? 'room_deactivated' : 'room_activated', { roomId: room.id }, eventId);
 	},
+	/** Mark a room as a bye/practice room (or back). Only while it has no games, so no result silently changes whether it counts. */
+	practice: async ({ request, locals, params }) => {
+		const admin = requireAdmin(locals.auth);
+		const eventId = eventIdParam(params);
+		const room = roomOf(eventId, await request.formData());
+		if (!room) return fail(404, { error: 'Room not found.' });
+		const db = getDb();
+		const games = db.select({ id: schema.matches.id }).from(schema.matches).where(eq(schema.matches.roomId, room.id)).all().length;
+		if (games)
+			return fail(400, {
+				error: `${room.name} has ${games} game${games === 1 ? '' : 's'} in it. Move or delete ${games === 1 ? 'it' : 'them'} on the Schedule page first, so no score changes from counting to practice (or back).`
+			});
+		db.update(schema.rooms).set({ practice: !room.practice }).where(eq(schema.rooms.id, room.id)).run();
+		audit(`user:${admin.id}`, room.practice ? 'room_practice_off' : 'room_practice_on', { roomId: room.id }, eventId);
+		return {
+			message: room.practice
+				? `${room.name} is a regular room again; the schedule can use it.`
+				: `${room.name} is now a practice room. The schedule and brackets won't use it, and games scored there never count.`
+		};
+	},
 	pin: async ({ request, locals, params }) => {
 		const admin = requireAdmin(locals.auth);
 		const eventId = eventIdParam(params);

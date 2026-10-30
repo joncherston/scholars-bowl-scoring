@@ -96,7 +96,9 @@ export const rooms = sqliteTable('rooms', {
 	projectorToken: text('projector_token').notNull(),
 	activeDeviceId: text('active_device_id'),
 	lastHeardAt: text('last_heard_at'),
-	active: integer('active', { mode: 'boolean' }).notNull().default(true)
+	active: integer('active', { mode: 'boolean' }).notNull().default(true),
+	/** A bye/practice room: games scored here never count toward standings, awards, brackets or results. */
+	practice: integer('practice', { mode: 'boolean' }).notNull().default(false)
 });
 
 /** Which rooms a session uses, and the moderator for each. */

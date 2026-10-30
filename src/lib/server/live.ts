@@ -122,8 +122,16 @@ export function computeLive(eventId: number, opts: { sessionIds?: number[] } = {
 			};
 		});
 
+	// Games in practice rooms never roll up: not in standings, individuals, brackets, awards, reports or public results.
+	const practiceRooms = new Set(rooms.filter((r) => r.practice).map((r) => r.id));
 	const matchRows = allSessionIds.length
-		? db.select().from(schema.matches).where(inArray(schema.matches.sessionId, allSessionIds)).orderBy(asc(schema.matches.roundNo)).all()
+		? db
+				.select()
+				.from(schema.matches)
+				.where(inArray(schema.matches.sessionId, allSessionIds))
+				.orderBy(asc(schema.matches.roundNo))
+				.all()
+				.filter((m) => !practiceRooms.has(m.roomId))
 		: [];
 	const shownIds = matchRows.filter((m) => sessionIds.includes(m.sessionId)).map((m) => m.id);
 	const rejectedRows = shownIds.length

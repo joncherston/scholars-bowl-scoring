@@ -150,6 +150,7 @@ export function createFromWebsite(ev: WpEvent): number {
 			classifications: classifications.length ? classifications : DEFAULT_CLASSIFICATIONS,
 			sessions: sessions.length ? sessions : defaultSessions(date),
 			roomNames: tplRooms.length ? tplRooms.sort((a, b) => a.sortOrder - b.sortOrder).map((r) => r.name) : ['Room 1', 'Room 2', 'Room 3', 'Room 4'],
+			practiceRoomNames: tplRooms.filter((r) => r.practice).map((r) => r.name),
 			settings: settingsFromWebsite(base, ev),
 			settingsSource: `the registration website${tpl ? ` (layout from ${tpl.name})` : ''}`
 		},

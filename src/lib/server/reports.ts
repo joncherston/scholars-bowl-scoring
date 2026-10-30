@@ -6,7 +6,7 @@ import { listSessions } from './events';
 import { rulesForMatch, matchEvents } from './ingest';
 import { computeLive, type Live } from './live';
 import { buildMatches } from './scorer';
-import { sessionRooms } from './schedule';
+import { practiceRoomIds, sessionRooms } from './schedule';
 
 export type Mode = 'final' | 'provisional';
 
@@ -183,12 +183,13 @@ export function roundSheet(eventId: number, matchId: number) {
 }
 
 export function sessionMatchIds(eventId: number, sessionId: number, roundNo?: number) {
+	const practice = practiceRoomIds(eventId);
 	return getDb()
 		.select({ id: schema.matches.id, roundNo: schema.matches.roundNo, roomId: schema.matches.roomId })
 		.from(schema.matches)
 		.where(eq(schema.matches.sessionId, sessionId))
 		.all()
-		.filter((m) => roundNo === undefined || m.roundNo === roundNo)
+		.filter((m) => (roundNo === undefined || m.roundNo === roundNo) && !practice.has(m.roomId))
 		.sort((a, b) => a.roundNo - b.roundNo || a.roomId - b.roomId)
 		.map((m) => m.id);
 }

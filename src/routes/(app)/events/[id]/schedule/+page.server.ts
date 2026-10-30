@@ -4,9 +4,10 @@ import { getDb, schema } from '$lib/server/db';
 import { currentRuleVersion, eventIdParam, listSessions } from '$lib/server/events';
 import { requireEventRole } from '$lib/server/guard';
 import { advanceBrackets, pinSlotTeams, planBrackets } from '$lib/server/bracket';
-import { generateDraft, getSession, loadSchedule, poolIdForTeams, savePoolRounds, savePools, saveTeamPools, startedMatchIds } from '$lib/server/schedule';
+import { generateDraft, getSession, loadSchedule, poolIdForTeams, practiceRoomIds, savePoolRounds, savePools, saveTeamPools, startedMatchIds } from '$lib/server/schedule';
+import { startPracticeGame } from '$lib/server/scorer';
 import { fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 export function load({ locals, params, url }) {
 	const id = eventIdParam(params);
@@ -32,6 +33,18 @@ function editErrors(eventId: number, sessionId: number, next: SchedMatch[]) {
 	return validateSchedule({ teams: s.teams, rooms: s.rooms, roundCount: s.session.roundCount, matches: next })
 		.filter((i) => i.level === 'error')
 		.map((i) => i.message);
+}
+
+const PRACTICE_ROOM_ERROR = 'That is a practice room: games there never count. Pick a regular room, or add a practice game in the Practice rooms section.';
+
+/** True when a game or a target room sits on the practice side, which ordinary edits may not cross. */
+function crossesPractice(eventId: number, roomIds: (number | null | undefined)[], matchIds: (number | null | undefined)[] = []) {
+	const practice = practiceRoomIds(eventId);
+	if (roomIds.some((r) => r && practice.has(r))) return true;
+	const ids = matchIds.filter((x): x is number => !!x);
+	if (!ids.length) return false;
+	const rows = getDb().select({ roomId: schema.matches.roomId }).from(schema.matches).where(inArray(schema.matches.id, ids)).all();
+	return rows.some((r) => practice.has(r.roomId));
 }
 
 export const actions = {
@@ -113,6 +126,7 @@ export const actions = {
 		const slot = db.select().from(schema.bracketSlots).where(and(eq(schema.bracketSlots.id, slotId), eq(schema.bracketSlots.sessionId, sessionId))).get();
 		if (!slot) return fail(404, { error: 'Bracket game not found.' });
 		if (!Number.isInteger(roundNo) || roundNo < 1) return fail(400, { error: 'Choose a round.' });
+		if (crossesPractice(eventId, [roomId])) return fail(400, { error: PRACTICE_ROOM_ERROR });
 		if (slot.matchId) {
 			if (startedMatchIds(sessionId).has(slot.matchId)) return fail(400, { error: 'That game has started; it can no longer move.' });
 			const s = loadSchedule(eventId, sessionId);
@@ -148,6 +162,7 @@ export const actions = {
 		const teamB = Number(f.get('teamB'));
 		const counts = f.get('counts') === 'on';
 		if (!teamA || !teamB || teamA === teamB) return fail(400, { error: 'Choose two different teams.' });
+		if (crossesPractice(eventId, [roomId], [matchId])) return fail(400, { error: PRACTICE_ROOM_ERROR });
 		const s = loadSchedule(eventId, sessionId);
 		if (matchId && s.matches.find((m) => m.id === matchId)?.locked) return fail(400, { error: 'This game has already been scored and cannot be changed here.' });
 		const next: SchedMatch[] = [...s.matches.filter((m) => m.id !== matchId), { id: matchId ?? -1, roundNo, roomId, teamA, teamB, counts }];
@@ -168,15 +183,28 @@ export const actions = {
 	},
 
 	deleteMatch: async ({ request, locals, params }) => {
-		const { eventId, user } = ctx(locals, params);
+		// Head scorekeepers may clear practice games; other games need schedule-edit rights (checked below).
+		const { eventId, user } = ctx(locals, params, false);
 		const f = await request.formData();
 		const sessionId = Number(f.get('sessionId'));
 		const matchId = Number(f.get('matchId'));
 		getSession(eventId, sessionId);
-		if (startedMatchIds(sessionId).has(matchId)) return fail(400, { error: 'This game has already been scored and cannot be deleted.' });
 		const db = getDb();
 		const m = db.select().from(schema.matches).where(and(eq(schema.matches.id, matchId), eq(schema.matches.sessionId, sessionId))).get();
 		if (!m) return fail(404, { error: 'Game not found.' });
+		// A practice game can go even after it was scored: none of it counts.
+		if (practiceRoomIds(eventId).has(m.roomId)) {
+			const scored = startedMatchIds(sessionId, { includePractice: true }).has(matchId);
+			db.transaction((tx) => {
+				tx.delete(schema.scoreEvents).where(eq(schema.scoreEvents.matchId, matchId)).run();
+				tx.delete(schema.rejectedEvents).where(eq(schema.rejectedEvents.matchId, matchId)).run();
+				tx.delete(schema.matches).where(eq(schema.matches.id, matchId)).run();
+			});
+			audit(`user:${user.id}`, 'practice_game_deleted', { sessionId, match: m, scored }, eventId);
+			return { message: 'Practice game removed.' };
+		}
+		ctx(locals, params);
+		if (startedMatchIds(sessionId).has(matchId)) return fail(400, { error: 'This game has already been scored and cannot be deleted.' });
 		// A bracket game removed by hand is not re-created by the bracket (its slot goes too).
 		const slot = db.select().from(schema.bracketSlots).where(eq(schema.bracketSlots.matchId, matchId)).get();
 		db.transaction((tx) => {
@@ -188,6 +216,19 @@ export const actions = {
 		return { message: 'Game removed.' };
 	},
 
+	/** Add a practice game to a practice room (never counts; the room's scorer can also start one). */
+	addPractice: async ({ request, locals, params }) => {
+		const { eventId, user } = ctx(locals, params, false);
+		const f = await request.formData();
+		const sessionId = Number(f.get('sessionId'));
+		getSession(eventId, sessionId);
+		const roomId = Number(f.get('roomId'));
+		const res = startPracticeGame(eventId, roomId, { sessionId, teamA: Number(f.get('teamA')), teamB: Number(f.get('teamB')) });
+		if (!res.ok) return fail(400, { error: res.error });
+		audit(`user:${user.id}`, 'practice_game_added', { sessionId, roomId, matchId: res.matchId }, eventId);
+		return { message: 'Practice game added. The practice room sees it right away; it never counts.' };
+	},
+
 	/** Move a game to another round/room; swaps with the game already there. */
 	move: async ({ request, locals, params }) => {
 		const { eventId, user } = ctx(locals, params);
@@ -196,6 +237,7 @@ export const actions = {
 		const matchId = Number(f.get('matchId'));
 		const roundNo = Number(f.get('roundNo'));
 		const roomId = Number(f.get('roomId'));
+		if (crossesPractice(eventId, [roomId], [matchId])) return fail(400, { error: PRACTICE_ROOM_ERROR });
 		const s = loadSchedule(eventId, sessionId);
 		const m = s.matches.find((x) => x.id === matchId);
 		if (!m) return fail(404, { error: 'Game not found.' });

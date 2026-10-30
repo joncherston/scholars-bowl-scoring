@@ -40,8 +40,16 @@ export function rememberScorerMode(mode: ScorerMode) {
 	document.cookie = `${SCORER_MODE_COOKIE}=${mode}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
 }
 
+/** What a practice room's scorer may pick from to start a practice game. */
+export interface PracticeOptions {
+	sessions: { id: number; name: string }[];
+	teams: { id: number; name: string; sessionId: number }[];
+}
+
 export interface RoomState {
-	room: { id: number; name: string; projectorToken: string };
+	/** practice: a bye/practice room — nothing scored here counts. */
+	room: { id: number; name: string; projectorToken: string; practice: boolean };
+	practice?: PracticeOptions;
 	event: { id: number; name: string; isTest: boolean };
 	matches: ScorerMatch[];
 	serverTime: string;

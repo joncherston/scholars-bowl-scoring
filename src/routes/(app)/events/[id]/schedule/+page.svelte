@@ -340,6 +340,44 @@
 				</table>
 			</section>
 		{/if}
+
+		{#if data.practiceRooms?.length}
+			<section class="card" style="margin-top: 16px">
+				<h3>Practice rooms</h3>
+				<p class="muted small">
+					{data.practiceRooms.map((r) => r.name).join(', ')} {data.practiceRooms.length === 1 ? 'is a practice room' : 'are practice rooms'}: the schedule and brackets leave {data.practiceRooms.length === 1 ? 'it' : 'them'} out, and games scored there never count. The room's scorer can start a practice game on the room computer, or you can add one here.
+				</p>
+				{#if data.practiceMatches?.length}
+					<table class="data">
+						<thead><tr><th>Room</th><th>Game</th><th>Teams</th><th>Status</th><th></th></tr></thead>
+						<tbody>
+							{#each data.practiceMatches as pm (pm.id)}
+								<tr>
+									<td>{data.practiceRooms.find((r) => r.id === pm.roomId)?.name ?? '—'}</td>
+									<td>Practice {pm.roundNo}</td>
+									<td>{teamName(pm.teamA)} v {teamName(pm.teamB)}</td>
+									<td>{pm.started ? 'Scored (practice)' : 'Not started'}</td>
+									<td>
+										<form method="POST" action="?/deleteMatch" use:enhance onsubmit={(e) => { if (!confirm('Remove this practice game?')) e.preventDefault(); }}>
+											<input type="hidden" name="sessionId" value={data.sessionId} />
+											<input type="hidden" name="matchId" value={pm.id} />
+											<button class="btn ghost small" type="submit">Remove</button>
+										</form>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{:else}<p class="muted small">No practice games in this session yet.</p>{/if}
+				<form method="POST" action="?/addPractice" use:enhance class="row" style="margin-top: 8px">
+					<input type="hidden" name="sessionId" value={data.sessionId} />
+					<select name="roomId" aria-label="Practice room">{#each data.practiceRooms as r (r.id)}<option value={r.id}>{r.name}</option>{/each}</select>
+					<select name="teamA" aria-label="Practice team A" required><option value="">Team A…</option>{#each (data.teams ?? []).filter((t) => !t.withdrawn) as t (t.id)}<option value={t.id}>{t.name}</option>{/each}</select>
+					<select name="teamB" aria-label="Practice team B" required><option value="">Team B…</option>{#each (data.teams ?? []).filter((t) => !t.withdrawn) as t (t.id)}<option value={t.id}>{t.name}</option>{/each}</select>
+					<button class="btn secondary small" type="submit">Add practice game</button>
+				</form>
+			</section>
+		{/if}
 	{/if}
 </div>
 
