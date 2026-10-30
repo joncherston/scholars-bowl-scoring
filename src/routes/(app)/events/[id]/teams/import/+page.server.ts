@@ -4,10 +4,10 @@ import { getDb, schema } from '$lib/server/db';
 import { eventIdParam, getEvent, listSessions, normalizeClassification } from '$lib/server/events';
 import { requireAdmin } from '$lib/server/guard';
 import { buildPreview, detectMapping, FIELDS, parseCsv, toRows, type ColumnMapping, type FieldKey } from '$lib/server/registrations';
-import { createTeam } from '$lib/server/teams';
+import { applyImportRows } from '$lib/server/import-apply';
 import { getWpSettings, wpEvents, wpRegistrations, WpError, type WpEvent } from '$lib/server/wordpress';
 import { fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import crypto from 'node:crypto';
 
 export async function load({ locals, url, params }) {
@@ -146,41 +146,7 @@ export const actions = {
 		}
 		await backupNow('pre-import');
 		const db = getDb();
-		const result = { created: 0, updated: 0, withdrawn: 0 };
-		db.transaction((tx) => {
-			for (const r of payload.rows) {
-				const fields = {
-					registrationName: r.schoolName,
-					registrationStatus: r.status,
-					contactName: r.contactName,
-					contactEmail: r.contactEmail,
-					contactPhone: r.contactPhone,
-					competingStudents: r.competingStudents,
-					coaches: r.coaches
-				};
-				if (r.action === 'new') {
-					if (r.registrationId != null) {
-						const dup = tx.select().from(schema.teams).where(and(eq(schema.teams.eventId, eventId), eq(schema.teams.registrationId, r.registrationId))).get();
-						if (dup) continue;
-					}
-					createTeam(tx, eventId, { ...fields, name: r.schoolName, classification: r.classification, sessionId: r.sessionId, registrationId: r.registrationId, source: payload.source === 'api' ? 'api' : 'csv' });
-					result.created++;
-				} else if (r.action === 'update' && r.existingTeamId) {
-					const t = tx.select().from(schema.teams).where(and(eq(schema.teams.id, r.existingTeamId), eq(schema.teams.eventId, eventId))).get();
-					if (!t) continue;
-					// Keep a display name the admin chose; follow the registration's name otherwise.
-					const name = t.name === (t.registrationName ?? t.name) ? r.schoolName : t.name;
-					tx.update(schema.teams)
-						.set({ ...fields, name, classification: r.classification || t.classification, sessionId: r.sessionId ?? t.sessionId, withdrawn: false })
-						.where(eq(schema.teams.id, t.id))
-						.run();
-					result.updated++;
-				} else if (r.action === 'withdraw' && r.existingTeamId) {
-					tx.update(schema.teams).set({ withdrawn: true, registrationStatus: 'cancelled' }).where(and(eq(schema.teams.id, r.existingTeamId), eq(schema.teams.eventId, eventId))).run();
-					result.withdrawn++;
-				}
-			}
-		});
+		const result = db.transaction((tx) => applyImportRows(tx, eventId, payload.rows, payload.source === 'api' ? 'api' : 'csv'));
 		audit(`user:${admin.id}`, 'registrations_imported', { source: payload.source === 'api' ? 'api' : 'csv', filename: payload.filename, sha256: payload.sha256, ...result }, eventId);
 		return { stage: 'done' as const, result };
 	}

@@ -2,12 +2,14 @@ import { building } from '$app/environment';
 import { loadAuth } from '$lib/server/auth';
 import { startBackupScheduler } from '$lib/server/backup';
 import { getDb } from '$lib/server/db';
+import { startWebsiteSync } from '$lib/server/wpsync';
 import { redirect, type Handle, type ServerInit } from '@sveltejs/kit';
 
 export const init: ServerInit = () => {
 	if (building) return;
 	getDb();
 	startBackupScheduler();
+	startWebsiteSync();
 };
 
 export const handle: Handle = async ({ event, resolve }) => {

@@ -8,6 +8,8 @@ export interface WpSettings {
 	url: string;
 	token: string;
 	enabled: boolean;
+	/** Create and update events, teams and rosters from the website automatically (plugin 1.1.0+). */
+	autoSync?: boolean;
 }
 
 const KEY = 'wordpress';
@@ -15,7 +17,7 @@ const KEY = 'wordpress';
 export function getWpSettings(): WpSettings | null {
 	const row = getDb().select().from(schema.appSettings).where(eq(schema.appSettings.key, KEY)).get();
 	const v = row?.value as Partial<WpSettings> | undefined;
-	return v?.url ? { url: v.url, token: v.token ?? '', enabled: !!v.enabled } : null;
+	return v?.url ? { url: v.url, token: v.token ?? '', enabled: !!v.enabled, autoSync: !!v.autoSync } : null;
 }
 
 export function saveWpSettings(s: WpSettings) {
@@ -69,6 +71,24 @@ export interface WpEvent {
 	status: string | null;
 	morning_classifications: string[];
 	afternoon_classifications: string[];
+	morning_session_time?: string | null;
+	afternoon_session_time?: string | null;
+	/** Plugin 1.1.0+. */
+	updated_at?: string | null;
+	timezone?: string | null;
+	roster_deadline?: string | null;
+	sessions?: { key: string; label: string; start_time: string | null; classifications: string[] }[];
+	divisions?: {
+		key: string;
+		name: string;
+		session: string;
+		classifications: string[];
+		format: 'round_robin' | 'bracket';
+		seeding_rounds: number;
+		bracket_size: number;
+		third_place_game: boolean;
+	}[];
+	awards?: { class_places?: number; division_places?: number; individual_places?: number };
 }
 
 export async function wpEvents(s: WpSettings, fetchImpl?: typeof fetch): Promise<WpEvent[]> {
@@ -77,7 +97,15 @@ export async function wpEvents(s: WpSettings, fetchImpl?: typeof fetch): Promise
 	return j.events;
 }
 
-interface WpRegistration {
+export interface WpStudent {
+	id: number;
+	first_name: string | null;
+	last_name: string | null;
+	grade: string | null;
+	sort_order?: number | null;
+}
+
+export interface WpRegistration {
 	id: number;
 	school_name: string | null;
 	contact_name: string | null;
@@ -90,6 +118,10 @@ interface WpRegistration {
 	registration_status: string | null;
 	is_test: boolean;
 	registration_date: string | null;
+	/** Plugin 1.1.0+. */
+	students?: WpStudent[];
+	roster_complete?: boolean;
+	roster_updated_at?: string | null;
 }
 
 /** Website registrations in the same shape the CSV importer produces, so both use one preview. */

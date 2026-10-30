@@ -4,6 +4,7 @@ import { backupNow, listBackups } from '$lib/server/backup';
 import { getDb, schema } from '$lib/server/db';
 import { requireAdmin } from '$lib/server/guard';
 import { getWpSettings, normalizeSiteUrl, saveWpSettings, wpEvents, WpError } from '$lib/server/wordpress';
+import { lastSyncReport, syncFromWebsite } from '$lib/server/wpsync';
 import { fail } from '@sveltejs/kit';
 import { asc, desc, eq } from 'drizzle-orm';
 
@@ -20,7 +21,9 @@ export function load({ locals, url }) {
 		users,
 		events,
 		backups: listBackups().slice(0, 30),
-		website: wp ? { url: wp.url, enabled: wp.enabled, tokenSet: !!wp.token, tokenHint: wp.token ? wp.token.slice(-4) : '' } : null
+		website: wp ? { url: wp.url, enabled: wp.enabled, autoSync: !!wp.autoSync, tokenSet: !!wp.token, tokenHint: wp.token ? wp.token.slice(-4) : '' } : null,
+		sync: lastSyncReport(),
+		notifyUrl: `${url.origin}/api/wordpress/notify`
 	};
 }
 
@@ -77,8 +80,9 @@ export const actions = {
 		const existing = getWpSettings();
 		const newToken = String(f.get('token') ?? '').trim();
 		const token = f.get('clearToken') === 'on' ? '' : newToken || existing?.token || '';
-		saveWpSettings({ url, token, enabled: f.get('enabled') === 'on' && !!token });
-		audit(`user:${admin.id}`, 'website_connection_saved', { url, enabled: f.get('enabled') === 'on', tokenChanged: !!newToken });
+		const enabled = f.get('enabled') === 'on' && !!token;
+		saveWpSettings({ url, token, enabled, autoSync: enabled && f.get('autoSync') === 'on' });
+		audit(`user:${admin.id}`, 'website_connection_saved', { url, enabled: f.get('enabled') === 'on', autoSync: f.get('autoSync') === 'on', tokenChanged: !!newToken });
 		return { message: token ? 'Website connection saved.' : 'Saved. Add an API token to turn the connection on.' };
 	},
 	testWebsite: async ({ locals }) => {
@@ -91,6 +95,12 @@ export const actions = {
 		} catch (e) {
 			return fail(400, { error: e instanceof WpError ? e.message : 'The connection test failed.' });
 		}
+	},
+	syncNow: async ({ locals }) => {
+		const admin = requireAdmin(locals.auth);
+		const r = await syncFromWebsite({ reason: `manual by ${admin.name}` });
+		if (!r.ok) return fail(400, { error: r.error ?? 'Sync failed.' });
+		return { message: `Synced: ${r.eventsCreated.length} event(s) created, ${r.teams.created} team(s) added, ${r.teams.updated} updated, ${r.teams.withdrawn} withdrawn, ${r.players.added} player(s) added, ${r.players.updated} updated.` };
 	},
 	backup: async ({ locals }) => {
 		const admin = requireAdmin(locals.auth);

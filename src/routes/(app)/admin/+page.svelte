@@ -41,7 +41,7 @@
 
 	<div class="card">
 		<h2>Website connection</h2>
-		<p class="muted small">Lets the import page pull registrations straight from the registration website instead of uploading a CSV. Needs plugin version 1.0.7 or later on the website. Off until a token is saved and the box is checked.</p>
+		<p class="muted small">Connects to the registration website (plugin 1.0.7+ for importing; 1.1.0+ for automatic sync). With automatic sync on, an event created on the website becomes an event here, and registrations and student rosters arrive as teams and players by themselves — every 10 minutes, and right away when the website sends a signed ping. Off until a token is saved and the box is checked.</p>
 		<form method="POST" action="?/website" class="grid cols-3">
 			<div class="field"><label for="wp-url">Website address</label><input id="wp-url" name="url" type="url" placeholder="https://suscholarsbowl.com" value={data.website?.url ?? ''} required /></div>
 			<div class="field">
@@ -51,11 +51,24 @@
 			</div>
 			<div class="field">
 				<label class="check" style="margin-top: 26px"><input type="checkbox" name="enabled" checked={data.website?.enabled ?? false} /> Use the website connection</label>
+				<label class="check"><input type="checkbox" name="autoSync" checked={data.website?.autoSync ?? false} /> Automatic sync (events, teams, rosters)</label>
 			</div>
 			<div class="row"><button class="btn" type="submit">Save</button></div>
 		</form>
 		{#if data.website?.tokenSet}
-			<form method="POST" action="?/testWebsite" style="margin-top: 8px"><button class="btn secondary" type="submit">Test the connection</button></form>
+			<div class="row" style="margin-top: 8px">
+				<form method="POST" action="?/testWebsite"><button class="btn secondary" type="submit">Test the connection</button></form>
+				{#if data.website.autoSync}<form method="POST" action="?/syncNow"><button class="btn secondary" type="submit">Sync now</button></form>{/if}
+			</div>
+			{#if data.website.autoSync}
+				<p class="muted small">On the website, paste this address into Scholars' Bowl → API Access → "Scoring app URL" and turn pings on: <code>{data.notifyUrl.replace('/api/wordpress/notify', '')}</code></p>
+			{/if}
+			{#if data.sync}
+				<div class="alert {data.sync.ok ? 'info' : 'error'} small" role="status" style="margin-top: 8px">
+					Last sync {new Date(data.sync.at).toLocaleString()}: {data.sync.ok ? `${data.sync.eventsCreated.length} event(s) created; teams +${data.sync.teams.created} / ~${data.sync.teams.updated} / withdrawn ${data.sync.teams.withdrawn}; players +${data.sync.players.added} / ~${data.sync.players.updated} / −${data.sync.players.removed}.` : data.sync.error}
+					{#if data.sync.notes.length}<ul>{#each data.sync.notes as n (n)}<li>{n}</li>{/each}</ul>{/if}
+				</div>
+			{/if}
 		{/if}
 	</div>
 
