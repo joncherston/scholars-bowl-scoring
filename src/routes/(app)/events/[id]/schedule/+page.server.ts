@@ -3,7 +3,7 @@ import { audit } from '$lib/server/audit';
 import { getDb, schema } from '$lib/server/db';
 import { currentRuleVersion, eventIdParam, listSessions } from '$lib/server/events';
 import { requireEventRole } from '$lib/server/guard';
-import { advanceBrackets, planBrackets } from '$lib/server/bracket';
+import { advanceBrackets, pinSlotTeams, planBrackets } from '$lib/server/bracket';
 import { generateDraft, getSession, loadSchedule, poolIdForTeams, savePoolRounds, savePools, saveTeamPools, startedMatchIds } from '$lib/server/schedule';
 import { fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
@@ -155,8 +155,11 @@ export const actions = {
 		if (errs.length) return fail(400, { error: errs.join(' ') });
 		const ta = s.teams.find((t) => t.id === teamA)!;
 		const tb = s.teams.find((t) => t.id === teamB)!;
-		const values = { sessionId, roundNo, roomId, teamAId: teamA, teamBId: teamB, counts, poolId: counts ? poolIdForTeams(sessionId, ta, tb) : null };
 		const db = getDb();
+		const before = matchId ? db.select().from(schema.matches).where(and(eq(schema.matches.id, matchId), eq(schema.matches.sessionId, sessionId))).get() : undefined;
+		// A bracket game keeps its stage; a pool game's pool follows its teams.
+		const values = { sessionId, roundNo, roomId, teamAId: teamA, teamBId: teamB, counts, poolId: counts && before?.stage !== 'bracket' ? poolIdForTeams(sessionId, ta, tb) : null };
+		if (before?.stage === 'bracket' && (before.teamAId !== teamA || before.teamBId !== teamB)) pinSlotTeams(before.id, teamA, teamB);
 		if (matchId) db.update(schema.matches).set(values).where(and(eq(schema.matches.id, matchId), eq(schema.matches.sessionId, sessionId))).run();
 		else db.insert(schema.matches).values(values).run();
 		db.update(schema.sessions).set({ scheduleStatus: 'draft' }).where(eq(schema.sessions.id, sessionId)).run();
@@ -174,9 +177,14 @@ export const actions = {
 		const db = getDb();
 		const m = db.select().from(schema.matches).where(and(eq(schema.matches.id, matchId), eq(schema.matches.sessionId, sessionId))).get();
 		if (!m) return fail(404, { error: 'Game not found.' });
-		db.delete(schema.matches).where(eq(schema.matches.id, matchId)).run();
-		db.update(schema.sessions).set({ scheduleStatus: 'draft' }).where(eq(schema.sessions.id, sessionId)).run();
-		audit(`user:${user.id}`, 'match_deleted', { sessionId, match: m }, eventId);
+		// A bracket game removed by hand is not re-created by the bracket (its slot goes too).
+		const slot = db.select().from(schema.bracketSlots).where(eq(schema.bracketSlots.matchId, matchId)).get();
+		db.transaction((tx) => {
+			if (slot) tx.delete(schema.bracketSlots).where(eq(schema.bracketSlots.id, slot.id)).run();
+			tx.delete(schema.matches).where(eq(schema.matches.id, matchId)).run();
+			tx.update(schema.sessions).set({ scheduleStatus: 'draft' }).where(eq(schema.sessions.id, sessionId)).run();
+		});
+		audit(`user:${user.id}`, 'match_deleted', { sessionId, match: m, bracketSlot: slot ?? null }, eventId);
 		return { message: 'Game removed.' };
 	},
 

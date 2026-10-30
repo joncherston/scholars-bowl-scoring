@@ -132,6 +132,7 @@ export function advanceBrackets(eventId: number, actor: string, opts: { sessionI
 			const seeds = group?.seeds ?? [];
 			const resolve = (src: string): number | null | 'wait' => {
 				const [kind, ref] = src.split(':');
+				if (kind === 'team') return Number(ref); // set by hand on the Schedule page
 				if (kind === 'seed') {
 					if (!seedsReady) return 'wait';
 					const sd = seeds.find((x) => x.seed === Number(ref)) ?? seeds[Number(ref) - 1];
@@ -186,6 +187,7 @@ export function advanceBrackets(eventId: number, actor: string, opts: { sessionI
 				const same = (m.teamAId === a && m.teamBId === b) || (m.teamAId === b && m.teamBId === a);
 				if (same) continue;
 				if (started.has(m.id)) {
+					if (!slot.counts) continue; // a non-counter that started with other teams: nothing rides on it
 					out.problems.push(`${label} has started with ${teamName(live, m.teamAId)} v ${teamName(live, m.teamBId)}, but results now say ${teamName(live, a)} v ${teamName(live, b)}. Decide with the head scorekeeper.`);
 					continue;
 				}
@@ -237,4 +239,12 @@ export function scheduleBracketAdvance(eventId: number) {
 			}
 		}, 300)
 	);
+}
+
+/**
+ * Staff changed the teams of a bracket game by hand: the game keeps those teams from now on
+ * (the bracket stops re-pairing it), and later bracket games still follow its result.
+ */
+export function pinSlotTeams(matchId: number, teamA: number, teamB: number) {
+	getDb().update(schema.bracketSlots).set({ sourceA: `team:${teamA}`, sourceB: `team:${teamB}` }).where(eq(schema.bracketSlots.matchId, matchId)).run();
 }
