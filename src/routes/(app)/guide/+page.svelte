@@ -33,6 +33,15 @@
 		</section>
 
 		<section>
+			<h2>Check-in desk</h2>
+			<ol>
+				<li>Open <strong>Check-in</strong> and pick the session. Schools that registered online already have their student list.</li>
+				<li>Click the school and <strong>read the names back to the coach</strong>: <em>Fix spelling</em>, <em>Remove</em> a student who didn't come, or add a substitute (up to 6).</li>
+				<li>Click <strong>Confirm roster &amp; check in</strong>. From then on the website no longer changes that roster.</li>
+			</ol>
+		</section>
+
+		<section>
 			<h2>Head scorekeeper</h2>
 			<ol>
 				<li><strong>Live tab:</strong> each room shows its game, score, and when its computer was last heard from (green under 30 s, amber under 2 min, red: go check).</li>
@@ -43,6 +52,14 @@
 				<li><strong>Finish:</strong> when every counting round is approved, click <em>Finalize session</em>, then Reports → <em>Awards sheet</em> for the ceremony.</li>
 			</ol>
 			<div class="box">
+				<h3>Brackets</h3>
+				<p>When a division's pool-play games are in, the semifinals appear by themselves on the Schedule and on the room computers (seed 1 v 4 and 2 v 3 by win/loss ratio, then total points, then head-to-head). The championship and 3rd-place game appear as soon as the semifinals are submitted. A tie for a seed shows in <em>Needs attention</em> with <em>Resolve tie</em>. To start early, Schedule → <em>Create bracket games now</em>.</p>
+			</div>
+			<div class="box">
+				<h3>Changes on the day</h3>
+				<p>Room changed? Rename the room or drag the game on the Schedule. Different pairing? Click the game and change the teams (a bracket game changed by hand stays as you set it). A game won't be played? Delete it. A student can't make it? Check-in → <em>Remove</em>. A team doesn't show? <em>Record forfeit</em>.</p>
+			</div>
+			<div class="box">
 				<h3>A team forfeits</h3>
 				<p>Not present within five minutes, a late school's first round, or a team that went home: open the round, choose the team under <em>Record forfeit</em>, and give a reason. The opponent gets the win and neither team scores; it counts as final with no separate approval, and the room's computer shows "Forfeit recorded — nothing to score". If a team withdraws mid-event, the Live tab lists its unplayed games with <em>Record forfeits for all remaining games</em>. To undo a forfeit, void it in the round's action history.</p>
 			</div>
@@ -52,7 +69,7 @@
 			</div>
 			<div class="box">
 				<h3>Rules at a glance (defaults)</h3>
-				<p>Tossups 10 points; no powers or negs. Bonuses only for the team that answered the tossup; partial credit per part. Individual scores count tossups only. Tiebreaker points decide the game but never count toward total points or individual scores. A forfeit is a win for the opponent with no points for either team. Non-counter games never count. Standings: rounds won, then total points, then head-to-head. Awards (team and individual) go by division: Private, Public 1A–3A, and Public 4A–7A.</p>
+				<p>Tossups 10 points; no powers or negs. Bonuses only for the team that answered the tossup; partial credit per part. Individual scores count tossups only. Tiebreaker points decide the game but never count toward total points or individual scores. A forfeit is a win for the opponent with no points for either team. Non-counter games never count. Standings: win/loss ratio (or rounds won), then total points, then head-to-head. Awards: 1st and 2nd in each classification, the overall winner of each division (Private, Public 1A–3A, Public 4A–7A), and all-tournament individual awards for each division's top scorers.</p>
 			</div>
 		</section>
 	</div>

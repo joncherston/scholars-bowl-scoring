@@ -31,5 +31,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	response.headers.set('Referrer-Policy', 'same-origin');
 	if (!response.headers.has('X-Frame-Options')) response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+	if (event.url.protocol === 'https:') response.headers.set('Strict-Transport-Security', 'max-age=31536000');
+	// Signed-in pages and API answers carry student names: never cache them in shared caches.
+	if ((a.kind !== 'anon' || p.startsWith('/api/')) && !response.headers.has('Cache-Control')) response.headers.set('Cache-Control', 'private, no-store');
 	return response;
 };

@@ -74,7 +74,7 @@ test.describe('head scorekeeper', () => {
 		// Awards are final now; PDF and Excel come out.
 		await page.goto(`/events/${eventId}/reports/awards?session=${session.id}`);
 		await expect(page.getByText(/PROVISIONAL/)).toHaveCount(0);
-		await expect(page.getByText('Team awards')).toBeVisible();
+		await expect(page.getByText('Overall division winners')).toBeVisible();
 		const pdf = await admin.request.get(`/events/${eventId}/reports/pdf?path=${encodeURIComponent(`/events/${eventId}/reports/awards?session=${session.id}`)}&name=awards`);
 		expect(pdf.headers()['content-type']).toBe('application/pdf');
 		expect((await pdf.body()).subarray(0, 5).toString()).toBe('%PDF-');
