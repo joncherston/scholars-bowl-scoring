@@ -64,7 +64,20 @@ export function awardsData(eventId: number, sessionIds?: number[]) {
 						record: `${r.record.wins}–${r.record.losses}`,
 						points: formatPoints(r.record.totalPoints),
 						tied: r.tied,
-						resolved: (r as { resolved?: string }).resolved ?? null
+						resolved: (r as { resolved?: string }).resolved ?? null,
+						bracketResult: r.bracketResult ?? null
+					})),
+				// 1st, 2nd… within each classification, in the division's final order.
+				classes: (gmode === 'final' ? live.classAwards.final : live.classAwards.provisional)
+					.filter((c) => c.division === g.division)
+					.map((c) => ({
+						classification: c.classification,
+						places: c.rows
+							.filter((r) => r.place <= live.rules.awards.classPlaces)
+							.map((r) => {
+								const rec = st.records[r.teamId];
+								return { place: r.place, placeLabel: ordinal(r.place), team: teamName(r.teamId), record: `${rec?.wins ?? 0}–${rec?.losses ?? 0}`, points: formatPoints(rec?.totalPoints ?? 0), tied: r.tied, pending: r.pending };
+							})
 					}))
 			};
 		});

@@ -24,8 +24,9 @@ export const actions = {
 		if (!['setup', 'active', 'finalized', 'archived'].includes(status)) return fail(400, { error: 'Unknown status.' });
 		const isTest = f.get('isTest') === 'on';
 		const publicResults = f.get('publicResults') === 'on' && !isTest;
-		getDb().update(schema.events).set({ name, eventDate, isTest, publicResults, classifications, status }).where(eq(schema.events.id, id)).run();
-		audit(`user:${admin.id}`, 'event_updated', { name, eventDate, isTest, publicResults, classifications, status }, id);
+		const publicIndividuals = (['off', 'initials', 'full'] as const).find((x) => x === f.get('publicIndividuals')) ?? 'off';
+		getDb().update(schema.events).set({ name, eventDate, isTest, publicResults, publicIndividuals, classifications, status }).where(eq(schema.events.id, id)).run();
+		audit(`user:${admin.id}`, 'event_updated', { name, eventDate, isTest, publicResults, publicIndividuals, classifications, status }, id);
 		return { ok: true };
 	}
 };
