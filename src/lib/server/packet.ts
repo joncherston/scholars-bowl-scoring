@@ -1,4 +1,4 @@
-import { CONFIRM_ITEMS, divisionOf, isFinalStatus, type RuleSettings } from '$lib/engine';
+import { CONFIRM_ITEMS, divisionOf, formatOf, isFinalStatus, type RuleSettings, type StandingsCriterion } from '$lib/engine';
 import { formatPoints } from '$lib/engine/points';
 import { error } from '@sveltejs/kit';
 import JSZip from 'jszip';
@@ -78,10 +78,16 @@ export function rulesSummary(rules: RuleSettings, classifications: string[]): st
 	const pts = (h: number) => `${formatPoints(h)} points`;
 	const yes = (b: boolean) => (b ? 'yes' : 'no');
 	const rounding = { exact: 'kept exact (e.g. 12.5)', half_up: 'rounded to whole points, halves up', down: 'rounded down to whole points' }[rules.bonus.rounding];
-	const criteria = { roundsWon: 'most rounds won', totalPoints: 'total points (counting games)', headToHead: 'head-to-head among tied teams' };
+	const criteria: Record<StandingsCriterion, string> = { winPct: 'win/loss ratio', roundsWon: 'most rounds won', totalPoints: 'total points (counting games)', headToHead: 'head-to-head among tied teams' };
 	const grouping = { division: 'by award division', classification: 'by classification', session: 'by session', overall: 'across the whole event' }[rules.awards.individualGrouping];
 	const divisions = new Map<string, string[]>();
 	for (const c of classifications) divisions.set(divisionOf(rules, c), [...(divisions.get(divisionOf(rules, c)) ?? []), c]);
+	const formats = [...divisions.keys()].map((d) => [d, formatOf(rules, d)] as const);
+	const format = formats.map(([d, f]) =>
+		f.type === 'bracket'
+			? `${d}: ${plural(f.seedingRounds, 'pool-play round')} seed ${f.bracketSize === 8 ? 'an' : 'a'} ${f.bracketSize}-team bracket (${f.seeding === 'poolWinnersFirst' ? 'pool winners seeded first' : 'seeded by standings'}; ${f.thirdPlaceGame ? 'with a' : 'no'} 3rd-place game; bracket games count for individuals: ${yes(f.bracketCountsForIndividuals)})`
+			: `${d}: round robin`
+	);
 	return [
 		`Tossups: ${pts(rules.tossupPoints)}. Powers: ${rules.power.enabled ? pts(rules.power.points) : 'no'}. Negs: ${rules.neg.enabled ? `minus ${pts(rules.neg.points)}${rules.neg.onlyOnInterrupt ? ', only on an interrupt' : ''}` : 'no'}.`,
 		`Bonuses: ${rules.individual.includeBonus ? 'team points, also credited to the player who answered the tossup' : 'team points only; individual scores count tossups only'}. Partial credit is proportional per part, ${rounding}. Bouncebacks: ${yes(rules.bonus.bounceback)}.`,
@@ -89,8 +95,9 @@ export function rulesSummary(rules: RuleSettings, classifications: string[]): st
 		'Forfeits: a win for the opponent; no points for either team.',
 		`Standings: ${rules.standings.order.map((c) => criteria[c]).join(', then ')}. Non-counter games never count.`,
 		`Rounds: up to ${rules.round.maxTossups} tossups, ${rules.round.timeLimitMinutes}-minute limit, minimum tossups: ${rules.round.minTossups ?? 'none'}.`,
-		`Awards: ${plural(rules.awards.teamPlaces, 'team place')} per award division; ${plural(rules.awards.individualPlaces, 'individual place')}, grouped ${grouping}. Ties at award places are decided by the head scorekeeper, with a recorded reason.`,
-		`Award divisions: ${[...divisions].map(([d, cs]) => (cs.length === 1 && cs[0] === d ? d : `${d} (${cs.join(', ')})`)).join('; ')}.`
+		`Awards: ${plural(rules.awards.teamPlaces, 'team place')} per award division; ${rules.awards.classPlaces ? `${plural(rules.awards.classPlaces, 'place')} in each classification, ordered by the division's final places; ` : ''}${plural(rules.awards.individualPlaces, 'individual place')}, grouped ${grouping}. Ties at award places are decided by the head scorekeeper, with a recorded reason.`,
+		`Award divisions: ${[...divisions].map(([d, cs]) => (cs.length === 1 && cs[0] === d ? d : `${d} (${cs.join(', ')})`)).join('; ')}.`,
+		`Format: ${format.join('; ')}.${formats.some(([, f]) => f.type === 'bracket') ? ` Bracket seeding: ${rules.format.seedingOrder.map((c) => criteria[c]).join(', then ')}.` : ''}`
 	];
 }
 

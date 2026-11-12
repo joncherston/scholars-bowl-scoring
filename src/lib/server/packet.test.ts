@@ -1,3 +1,4 @@
+import { CONFIRM_ITEMS, DEFAULT_BRACKET_FORMAT, HIGH_SCHOOL_DEFAULTS } from '$lib/engine';
 import { eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
@@ -5,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getDb, schema, useMemoryDb } from './db';
 import { listSessions } from './events';
 import { computeLive } from './live';
-import { buildReviewPacket, fileSafe, packetPlan, packetReadme } from './packet';
+import { buildReviewPacket, fileSafe, packetPlan, packetReadme, rulesSummary } from './packet';
 import { printablePage } from './pdf';
 import { createPracticeEvent } from './practice';
 import { simulationStatus, startSimulation } from './simulate';
@@ -159,8 +160,9 @@ describe('packet Read me', () => {
 		expect(text).toContain('toward total points in standings: no; toward individual totals: no.');
 		expect(text).toContain('- Forfeits: a win for the opponent; no points for either team.');
 		expect(text).toContain('- Award divisions: Private; Public 1A–3A (1A, 2A, 3A); Public 4A–7A (4A, 5A, 6A, 7A).');
-		expect(text).toContain('- Awards: 1 team place per award division; 3 individual places, grouped by award division.');
-		expect(text).toContain('Settings confirmed before the event: 0 of 9.');
+		expect(text).toContain("- Awards: 1 team place per award division; 2 places in each classification, ordered by the division's final places; 3 individual places, grouped by award division.");
+		expect(text).toContain('- Format: Private: round robin; Public 1A–3A: round robin; Public 4A–7A: round robin.\r\n');
+		expect(text).toContain(`Settings confirmed before the event: 0 of ${CONFIRM_ITEMS.length}.`);
 		// Open flags, most serious first; decided ties listed apart.
 		const open = lines.slice(lines.indexOf('OPEN FLAGS AND TIES (3)') + 1, lines.indexOf('OPEN FLAGS AND TIES (3)') + 4);
 		const team = (id: string) => live.teams.find((t) => t.id === id)!.name;
@@ -171,6 +173,19 @@ describe('packet Read me', () => {
 		]);
 		expect(lines).toContain('TIES DECIDED BY THE HEAD SCOREKEEPER (1)');
 		expect(text).toContain('resolved: sudden-death question');
+	});
+
+	it('describes bracket formats and the seeding order', () => {
+		const rules = structuredClone(HIGH_SCHOOL_DEFAULTS);
+		rules.standings.order = ['winPct', 'totalPoints', 'headToHead'];
+		rules.awards.classPlaces = 0;
+		rules.format.divisions['Public 4A–7A'] = { ...DEFAULT_BRACKET_FORMAT, seedingRounds: 4, bracketSize: 8, thirdPlaceGame: false, seeding: 'poolWinnersFirst', bracketCountsForIndividuals: false };
+		const lines = rulesSummary(rules, ['Private', '1A', '4A', '5A']);
+		expect(lines).toContain('Standings: win/loss ratio, then total points (counting games), then head-to-head among tied teams. Non-counter games never count.');
+		expect(lines.find((l) => l.startsWith('Awards:'))).toMatch(/^Awards: 1 team place per award division; 3 individual places/);
+		expect(lines).toContain(
+			'Format: Private: round robin; Public 1A–3A: round robin; Public 4A–7A: 4 pool-play rounds seed an 8-team bracket (pool winners seeded first; no 3rd-place game; bracket games count for individuals: no). Bracket seeding: win/loss ratio, then total points (counting games), then head-to-head among tied teams.'
+		);
 	});
 
 	it('says when nothing is open and every session is final', () => {
