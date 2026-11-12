@@ -65,7 +65,7 @@ cp .env.example .env   # then edit; generate SETUP_TOKEN with: openssl rand -hex
 
 ## Backups and restore
 
-- **Automatic:** every 5 minutes on event days (dates of non-test events and sessions) and nightly at 2 AM Central otherwise, in `data/backups/` (SQLite online backups, safe while running). Event-day snapshots are all kept; the newest 14 nightlies are kept.
+- **Automatic:** every 5 minutes on event days (dates of non-test events and sessions; practice events don't count) and weekly at 2 AM Central otherwise, in `data/backups/` (SQLite online backups, safe while running). The server keeps only recent snapshots: the newest weekly and off-server snapshot, the newest 3 of each other kind (none older than 30 days), and event-day snapshots for 30 days. Older and nightly copies live off the server (below).
 - **Also:** before every deploy, migration, registration import, and results-file import.
 - **Admin page:** "Back up now" and "Download full backup"; per-event "Export everything to Excel now".
 - **Off the server:** `./deploy/pull-backups.sh` takes a fresh snapshot and copies the server's snapshots to `~/ScholarsBowlBackups` (`--watch` repeats every 10 minutes; leave it running on event day). This computer keeps 30 days of copies, plus every event-day snapshot and the pre-deploy snapshots from the week before and after an event, for good (rules in `deploy/backup-retention.sh`). A run that can't take a fresh snapshot removes nothing.

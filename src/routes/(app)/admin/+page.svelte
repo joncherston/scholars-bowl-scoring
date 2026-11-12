@@ -20,7 +20,7 @@
 				<a class="btn" href="/admin/backups/latest">Download full backup</a>
 			</div>
 		</div>
-		<p class="muted small">Automatic snapshots every 5 minutes on event days and nightly otherwise. A backup is also taken before every deploy and every import. For a spreadsheet of everything, use an event's Reports → Excel workbook.</p>
+		<p class="muted small">Automatic snapshots every 5 minutes on event days and weekly otherwise. A backup is also taken before every deploy and every import. The server keeps only recent snapshots; 30 days of nightly copies are kept off the server. For a spreadsheet of everything, use an event's Reports → Excel workbook.</p>
 		{#if data.events.length}
 			<div class="row" style="margin: 8px 0 14px">
 				<strong>Export everything to Excel now:</strong>

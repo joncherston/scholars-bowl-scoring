@@ -21,8 +21,8 @@ await db.backup(file);
 db.close();
 console.log(`Backup written: ${file}`);
 
-// Keep the newest copies of each kind this script makes.
-const keep = { 'pre-deploy': 20, offsite: 10, manual: 20 };
+// Keep the newest copies of each kind this script makes (the app's prune() in backup.ts also drops ones over 30 days old).
+const keep = { 'pre-deploy': 3, offsite: 1, manual: 3 };
 if (keep[kind]) {
 	const mine = fs
 		.readdirSync(dir)
