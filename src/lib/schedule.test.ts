@@ -86,6 +86,88 @@ describe('generateSchedule', () => {
 	});
 });
 
+describe('equal games and per-pool rounds (decision Oct 21, 2026)', () => {
+	const gamesOf = (matches: { teamA: number; teamB: number; counts: boolean }[], id: number) => matches.filter((m) => m.counts && (m.teamA === id || m.teamB === id)).length;
+	const noDoubleBooking = (matches: { roundNo: number; teamA: number; teamB: number }[]) => {
+		for (const r of new Set(matches.map((m) => m.roundNo))) {
+			const busy = matches.filter((m) => m.roundNo === r).flatMap((m) => [m.teamA, m.teamB]);
+			expect(new Set(busy).size).toBe(busy.length);
+		}
+	};
+
+	it('9 teams in 8 rounds: every team plays 6 counting games (7 each is impossible: 9 × 7 is odd)', () => {
+		const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+		const teams = ids.map((id) => team(id, 'Private'));
+		const res = generateSchedule({ pools: [pool('Private', ids)], teams, rooms: rooms(7), rounds: 8, fillByesWithNonCounters: false });
+		expect(ids.map((id) => gamesOf(res.matches, id))).toEqual(Array(9).fill(6));
+		expect(res.matches.filter((m) => m.counts)).toHaveLength(27);
+		noDoubleBooking(res.matches);
+		expect(res.warnings.some((w) => /every team plays 6 counting games/.test(w))).toBe(true);
+		// No pair meets twice.
+		const pairs = res.matches.map((m) => [m.teamA, m.teamB].sort().join('-'));
+		expect(new Set(pairs).size).toBe(pairs.length);
+	});
+
+	it('7 teams in 8 rounds: the rematches are left out, so every pair meets exactly once', () => {
+		const ids = [1, 2, 3, 4, 5, 6, 7];
+		const res = generateSchedule({ pools: [pool('Private', ids)], teams: ids.map((id) => team(id, 'Private')), rooms: rooms(4), rounds: 8, fillByesWithNonCounters: false });
+		expect(ids.map((id) => gamesOf(res.matches, id))).toEqual(Array(7).fill(6));
+		const pairs = res.matches.filter((m) => m.counts).map((m) => [m.teamA, m.teamB].sort().join('-'));
+		expect(new Set(pairs).size).toBe(21);
+		expect(pairs).toHaveLength(21);
+	});
+
+	it('the 2026 morning: Private (9 teams) plays 8 rounds and 1A–3A (4 teams) plays 6, in 7 rooms', () => {
+		const priv = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+		const small = [10, 11, 12, 13];
+		const teams = [...priv.map((id) => team(id, 'Private')), ...small.map((id) => ({ ...team(id, id === 10 ? '1A' : id === 13 ? '3A' : '2A', 'p'), lastRound: 6 }))];
+		const res = generateSchedule({ pools: [pool('Private', priv), { ...pool('p', small), rounds: 6 }], teams, rooms: rooms(7), rounds: 8, fillByesWithNonCounters: true });
+		noDoubleBooking(res.matches);
+		expect(priv.map((id) => gamesOf(res.matches, id))).toEqual(Array(9).fill(6));
+		expect(small.map((id) => gamesOf(res.matches, id))).toEqual([6, 6, 6, 6]);
+		// The small pool is done after round 6: no games, no non-counters, and not listed as byes.
+		expect(res.matches.filter((m) => m.roundNo > 6 && (small.includes(m.teamA) || small.includes(m.teamB)))).toEqual([]);
+		expect(res.byes.filter((b) => b.roundNo > 6 && small.includes(b.teamId))).toEqual([]);
+		expect(byesByRound(teams, res.matches, 8).get(7)!.some((id) => small.includes(id))).toBe(false);
+		expect(res.warnings.filter((w) => /rooms/.test(w))).toEqual([]);
+		// Validation is clean apart from notes (no unequal-games warning).
+		const issues = validateSchedule({ teams, rooms: rooms(7), roundCount: 8, matches: res.matches.map((m, i) => ({ ...m, id: i })) });
+		expect(issues.filter((i) => i.level !== 'notice' && !/never play each other/.test(i.message))).toEqual([]);
+	});
+
+	it('teams whose counting game was left out are not paired back together as a non-counter when others are free', () => {
+		const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+		const teams = ids.map((id) => team(id, 'Private'));
+		const res = generateSchedule({ pools: [pool('Private', ids)], teams, rooms: rooms(7), rounds: 8, fillByesWithNonCounters: true });
+		const nc = res.matches.filter((m) => !m.counts);
+		expect(nc.length).toBeGreaterThan(0);
+		noDoubleBooking(res.matches);
+		expect(ids.map((id) => gamesOf(res.matches, id))).toEqual(Array(9).fill(6));
+		// A non-counter never replays, in the same round, the round-robin game that was left out.
+		const rr = roundRobin(ids);
+		for (const m of nc) {
+			const scheduled = rr[m.roundNo - 1].filter(([, b]) => b !== null).map(([a, b]) => [a, b].sort().join('-'));
+			expect(scheduled).not.toContain([m.teamA, m.teamB].sort().join('-'));
+		}
+	});
+
+	it('validation warns when counting games differ by even one, or a pool plays past its rounds', () => {
+		const ts = [{ ...team(1, '1A', 'p'), lastRound: 1 }, { ...team(2, '1A', 'p'), lastRound: 1 }, { ...team(3, '1A', 'p'), lastRound: 1 }];
+		const issues = validateSchedule({
+			teams: ts,
+			rooms: rooms(2),
+			roundCount: 2,
+			matches: [
+				{ id: 1, roundNo: 1, roomId: 100, teamA: 1, teamB: 2, counts: true },
+				{ id: 2, roundNo: 2, roomId: 100, teamA: 1, teamB: 3, counts: true }
+			]
+		});
+		const msgs = issues.map((i) => i.message).join('\n');
+		expect(msgs).toMatch(/unequal numbers of counting games/);
+		expect(msgs).toMatch(/Round 2: T1's pool plays only 1 rounds/);
+	});
+});
+
 describe('validateSchedule', () => {
 	const teams = [team(1, '1A', '1A', 50), team(2, '1A', '1A', 50), team(3, '2A'), team(4, '2A')];
 	it('catches double bookings of teams and rooms', () => {

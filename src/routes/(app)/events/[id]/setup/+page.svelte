@@ -35,7 +35,15 @@
 	<label class="check"><input type="checkbox" name="isTest" checked={e.isTest} /> Practice / test event</label>
 	<label class="check" style="margin-top: 8px">
 		<input type="checkbox" name="publicResults" checked={e.publicResults} disabled={e.isTest} />
-		Show team standings and match results on the public results page (never student names)
+		Show live results on the public page: match results, bracket, and team rankings by division and classification
 	</label>
+	<div class="field" style="margin-top: 8px; max-width: 520px">
+		<label for="publicIndividuals">Top individual scorers on the public page</label>
+		<select id="publicIndividuals" name="publicIndividuals" value={e.publicIndividuals} disabled={e.isTest}>
+			<option value="off">Off — staff only (default; the competitors are minors)</option>
+			<option value="initials">First name and last initial, with school</option>
+			<option value="full">Full name, with school</option>
+		</select>
+	</div>
 	<div style="margin-top: 16px"><button class="btn" type="submit">Save</button></div>
 </form>

@@ -30,8 +30,26 @@ export interface ScorerMatch {
 	events: ScoreEvent[];
 }
 
+/** Which room scoring screen a computer uses: the new screen, or the classic spreadsheet. */
+export type ScorerMode = 'screen' | 'sheet';
+export const SCORER_MODE_COOKIE = 'sb_scorer_mode';
+export const scorerPath = (mode: string | undefined | null) => (mode === 'sheet' ? '/sheet' : '/scorer');
+
+/** Remember this computer's choice of screen (read by the room sign-in page). */
+export function rememberScorerMode(mode: ScorerMode) {
+	document.cookie = `${SCORER_MODE_COOKIE}=${mode}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+}
+
+/** What a practice room's scorer may pick from to start a practice game. */
+export interface PracticeOptions {
+	sessions: { id: number; name: string }[];
+	teams: { id: number; name: string; sessionId: number }[];
+}
+
 export interface RoomState {
-	room: { id: number; name: string; projectorToken: string };
+	/** practice: a bye/practice room — nothing scored here counts. */
+	room: { id: number; name: string; projectorToken: string; practice: boolean };
+	practice?: PracticeOptions;
 	event: { id: number; name: string; isTest: boolean };
 	matches: ScorerMatch[];
 	serverTime: string;

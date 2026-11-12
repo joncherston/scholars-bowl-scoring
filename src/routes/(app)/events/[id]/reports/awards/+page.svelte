@@ -22,7 +22,27 @@
 			{/if}
 			{#if s.openTies}<div class="prov">{s.openTies} tie(s) at award places still need a decision</div>{/if}
 
-			<h2>Team awards</h2>
+			{#if a.rules.awards.classPlaces > 0}
+				<h2>Classification awards</h2>
+				{#each s.divisions as c (c.label)}
+					{#each c.classes as k (k.classification)}
+						<div class="award">
+							<h3>{k.classification} <span class="div-note">({c.label})</span></h3>
+							{#each k.places as p (p.team)}
+								<div class="place">
+									<span class="pl">{p.placeLabel} place</span>
+									<span class="who">{p.team}</span>
+									<span class="detail">{p.record}, {p.points} pts</span>
+								</div>
+								{#if p.tied}<div class="note">⚠ Tied — not yet decided</div>{/if}
+								{#if p.pending}<div class="note">Waiting on bracket games</div>{/if}
+							{/each}
+						</div>
+					{/each}
+				{/each}
+			{/if}
+
+			<h2>{a.rules.awards.teamPlaces === 1 ? 'Overall division winners' : 'Division awards'}</h2>
 			{#each s.divisions as c (c.label)}
 				<div class="award">
 					<h3>{c.label}</h3>
@@ -30,7 +50,7 @@
 						<div class="place">
 							<span class="pl">{p.placeLabel} place</span>
 							<span class="who">{p.team}</span>
-							<span class="detail">{p.classification} · {p.record}, {p.points} pts</span>
+							<span class="detail">{p.classification} · {p.record}, {p.points} pts{p.bracketResult ? ` · ${p.bracketResult}` : ''}</span>
 						</div>
 						{#if p.tied}<div class="note">⚠ Tied — not yet decided</div>{/if}
 						{#if p.resolved}<div class="note">Tie decided: {p.resolved}</div>{/if}
@@ -42,7 +62,7 @@
 			{/each}
 
 			{#if s.individuals.length && a.rules.awards.individualPlaces > 0}
-				<h2>Individual awards</h2>
+				<h2>All-tournament individual awards</h2>
 				{#each s.individuals as g (g.label)}
 					<div class="award">
 						<h3>{g.label}</h3>
@@ -112,6 +132,11 @@
 	.award {
 		margin: 10px 0 14px;
 		break-inside: avoid;
+	}
+	.div-note {
+		font-size: 10pt;
+		color: #444;
+		font-weight: 400;
 	}
 	h3 {
 		margin: 0 0 4px;

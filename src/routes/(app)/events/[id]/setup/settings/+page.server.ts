@@ -1,4 +1,4 @@
-import { CONFIRM_ITEMS, normalizeRules, parsePoints, type RuleSettings, type StandingsCriterion } from '$lib/engine';
+import { CONFIRM_ITEMS, DEFAULT_BRACKET_FORMAT, normalizeRules, parsePoints, type DivisionFormat, type RuleSettings, type StandingsCriterion } from '$lib/engine';
 import { audit } from '$lib/server/audit';
 import { getDb, schema } from '$lib/server/db';
 import { currentRuleVersion, eventIdParam, getEvent, saveRules } from '$lib/server/events';
@@ -64,10 +64,14 @@ function parseSettings(f: FormData, base: RuleSettings, classifications: string[
 	if (!r.round.endReasons.length) r.round.endReasons = ['Time called', 'All tossups read', 'Other'];
 	r.roster = { maxPlayers: int('maxPlayers', 1, 20), activePlayers: int('activePlayers', 1, 20) };
 	if (r.roster.activePlayers > r.roster.maxPlayers) throw new FormError('Players at a time cannot exceed the roster limit.');
-	const order = [f.get('order1'), f.get('order2'), f.get('order3')].map(String) as StandingsCriterion[];
-	if (new Set(order).size !== 3 || !order.every((o) => ['roundsWon', 'totalPoints', 'headToHead'].includes(o)))
-		throw new FormError('Each standings tie-breaker must be used once.');
-	r.standings = { order };
+	const CRITERIA = ['roundsWon', 'winPct', 'totalPoints', 'headToHead'];
+	const readOrder = (prefix: string, label: string) => {
+		const order = [1, 2, 3].map((n) => String(f.get(`${prefix}${n}`))) as StandingsCriterion[];
+		if (!order.every((o) => CRITERIA.includes(o)) || new Set(order).size !== 3 || (order.includes('roundsWon') && order.includes('winPct')))
+			throw new FormError(`${label}: use each tie-breaker once (rounds won and win ratio measure the same thing; pick one).`);
+		return order;
+	};
+	r.standings = { order: readOrder('order', 'Standings order') };
 	const divisions = { ...base.awards.divisions };
 	for (const c of classifications) {
 		const name = String(f.get(`division:${c}`) ?? '').trim();
@@ -78,8 +82,26 @@ function parseSettings(f: FormData, base: RuleSettings, classifications: string[
 		teamPlaces: int('teamPlaces', 1, 10),
 		individualPlaces: int('individualPlaces', 0, 20),
 		individualGrouping: (['division', 'classification', 'session', 'overall'] as const).find((x) => x === f.get('individualGrouping')) ?? 'division',
-		divisions
+		divisions,
+		classPlaces: int('classPlaces', 0, 10)
 	};
+	// Format per division (division names as just saved).
+	const formats: Record<string, DivisionFormat> = {};
+	for (const d of new Set(Object.values(divisions))) {
+		const k = `fmt:${d}`;
+		if (f.get(`${k}:type`) !== 'bracket') continue;
+		const size = Number(f.get(`${k}:size`));
+		formats[d] = {
+			...DEFAULT_BRACKET_FORMAT,
+			seedingRounds: int(`${k}:seedingRounds`, 1, 20),
+			bracketSize: ([2, 4, 8] as const).find((x) => x === size) ?? 4,
+			thirdPlaceGame: on(`${k}:third`),
+			seeding: f.get(`${k}:seeding`) === 'poolWinnersFirst' ? 'poolWinnersFirst' : 'standings',
+			bracketCountsForIndividuals: on(`${k}:indiv`),
+			fillNonCounters: on(`${k}:fill`)
+		};
+	}
+	r.format = { seedingOrder: readOrder('seed', 'Bracket seeding order'), divisions: formats };
 	r.maxRoundsPerSession = int('maxRoundsPerSession', 1, 30);
 	return normalizeRules(r);
 }

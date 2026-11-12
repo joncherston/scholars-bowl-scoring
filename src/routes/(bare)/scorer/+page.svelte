@@ -2,12 +2,13 @@
 	import { dev } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { rejectReason, ScorerStore } from '$lib/client/scorer-store.svelte';
+	import PracticeStart from '$lib/components/PracticeStart.svelte';
 	import RoundSummary from '$lib/components/RoundSummary.svelte';
 	import Scoreboard from '$lib/components/Scoreboard.svelte';
 	import TossupLog from '$lib/components/TossupLog.svelte';
 	import { computeRound, other, type BonusPart, type EventBody, type Side } from '$lib/engine';
 	import { bonusShare, formatPoints, parsePoints } from '$lib/engine/points';
-	import type { ScorerMatch } from '$lib/scorer-types';
+	import { rememberScorerMode, type ScorerMatch } from '$lib/scorer-types';
 	import { onDestroy, onMount, tick } from 'svelte';
 
 	const store = new ScorerStore();
@@ -230,6 +231,12 @@
 		matchId = id;
 		showGames = false;
 	}
+	let practiceOpen = $state(false);
+	async function practiceStarted(id: number) {
+		await store.refresh();
+		practiceOpen = false;
+		openGame(id);
+	}
 	const nextGame = $derived.by(() => {
 		const ms = store.state?.matches ?? [];
 		const i = ms.findIndex((m) => m.id === matchId);
@@ -328,6 +335,7 @@
 
 	let clock: ReturnType<typeof setInterval>;
 	onMount(async () => {
+		rememberScorerMode('screen');
 		await store.init();
 		if (store.loadError === 'signed_out' && !store.state) {
 			goto('/room');
@@ -362,6 +370,7 @@
 <svelte:head><title>{store.state ? `${store.state.room.name} scorer` : 'Scorer'} · Scholars' Bowl</title></svelte:head>
 
 {#if store.state?.event.isTest}<div class="test-banner">PRACTICE / TEST EVENT</div>{/if}
+{#if store.state?.room.practice}<div class="test-banner">PRACTICE ROOM · scores here never count</div>{/if}
 
 <div class="scorer">
 	<header class="top">
@@ -378,6 +387,7 @@
 				{#if menuOpen}
 					<div class="menu-pop" role="menu">
 						{#if status === 'in_progress'}<button type="button" role="menuitem" onclick={openFixLineup}>Fix lineup (wrong players chosen)</button>{/if}
+						<button type="button" role="menuitem" onclick={() => { rememberScorerMode('sheet'); goto('/sheet'); }}>Switch to the spreadsheet</button>
 						<button type="button" role="menuitem" onclick={() => { store.downloadRescueFile(); menuOpen = false; }}>Download results file (for a flash drive)</button>
 						{#if store.state}<a role="menuitem" href="/projector/{store.state.room.projectorToken}" target="_blank" rel="noopener">Open projector view</a>{/if}
 						<button type="button" role="menuitem" onclick={() => { helpOpen = true; menuOpen = false; }}>Keyboard shortcuts</button>
@@ -406,6 +416,11 @@
 
 	{#if !ready}
 		<p class="muted center">Loading…</p>
+	{:else if store.state?.practice && (store.state.matches.length === 0 || practiceOpen)}
+		<div class="card">
+			<h2>Start a practice game in {store.state.room.name}</h2>
+			<PracticeStart options={store.state.practice} onstarted={practiceStarted} oncancel={store.state.matches.length ? () => (practiceOpen = false) : undefined} />
+		</div>
 	{:else if !store.state || store.state.matches.length === 0}
 		<div class="card center">
 			<h2>No games scheduled for this room yet</h2>
@@ -413,7 +428,10 @@
 		</div>
 	{:else if showGames || !match || !result}
 		<div class="card">
-			<h2>Games in {store.state.room.name}</h2>
+			<div class="row between">
+				<h2>Games in {store.state.room.name}</h2>
+				{#if store.state.practice}<button class="btn small" type="button" onclick={() => (practiceOpen = true)}>Start a practice game</button>{/if}
+			</div>
 			<ul class="games">
 				{#each store.state.matches as m (m.id)}
 					{@const st = statusOf(m)}
@@ -422,7 +440,7 @@
 							<span class="g-round">{m.sessionName} · Round {m.roundNo}{#if m.time} · {fmtTime(m.time)}{/if}</span>
 							<span class="g-teams">{m.teams.A.name} vs {m.teams.B.name}</span>
 							<span class="g-st">
-								{#if !m.counts}<span class="badge">Non-counter</span>{/if}
+								{#if store.state.room.practice}<span class="badge warn">Practice</span>{:else if !m.counts}<span class="badge">Non-counter</span>{/if}
 								<span class="badge {st === 'approved' || st === 'forfeit' ? 'ok' : st === 'submitted' ? 'info' : st === 'not_started' ? '' : 'warn'}">
 									{{ not_started: 'Not started', in_progress: 'In progress', ended: 'Ready to submit', submitted: 'Submitted', approved: 'Approved', forfeit: 'Forfeit' }[st]}
 								</span>

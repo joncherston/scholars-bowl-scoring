@@ -22,6 +22,7 @@
 		<form method="POST" action="?/add"><button class="btn secondary" type="submit">Add a room</button></form>
 	</div>
 </div>
+<p class="muted" id="practice-help">Mark bye rooms as <strong>practice rooms</strong>: the schedule and brackets leave them out, and anything scored there (training scorekeepers, teams practicing during a bye) never reaches standings, awards or results.</p>
 <p class="muted">Room scorers sign in at <strong>{data.origin}/room</strong> with the room's PIN. The projector link shows a read-only scoreboard for rooms with a separate display.</p>
 {#if form && 'message' in form}<div class="alert success" role="status">{form.message}</div>{/if}
 {#if form?.error}<div class="alert error" role="alert">{form.error}</div>{/if}
@@ -31,12 +32,21 @@
 		<thead><tr><th>Room</th><th>PIN</th><th>Scoring device</th><th>Projector link</th><th></th></tr></thead>
 		<tbody>
 			{#each data.rooms as r (r.id)}
-				<tr class:inactive={!r.active}>
+				<tr class:inactive={!r.active} class:practice={r.practice} data-room={r.id}>
 					<td>
 						<form method="POST" action="?/rename" class="row" style="flex-wrap: nowrap">
 							<input type="hidden" name="roomId" value={r.id} />
 							<input name="name" type="text" value={r.name} aria-label="Room name" style="min-width: 120px" />
 							<button class="btn small secondary" type="submit">Rename</button>
+						</form>
+						<form method="POST" action="?/practice" class="practice-toggle">
+							<input type="hidden" name="roomId" value={r.id} />
+							<label>
+								<input type="checkbox" checked={r.practice} onchange={(e) => e.currentTarget.form?.requestSubmit()} aria-describedby="practice-help" />
+								Practice / bye room
+							</label>
+							{#if r.practice}<span class="badge warn">Scores never count</span>{/if}
+							<noscript><button class="btn small ghost" type="submit">Change</button></noscript>
 						</form>
 					</td>
 					<td class="num pin">{r.pin}</td>
@@ -78,5 +88,22 @@
 	}
 	td form {
 		margin: 0;
+	}
+	.practice-toggle {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-top: 6px;
+		font-size: 0.9rem;
+	}
+	.practice-toggle label {
+		white-space: nowrap;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-weight: 600;
+	}
+	tr.practice td:first-child {
+		box-shadow: inset 4px 0 0 #e0b100;
 	}
 </style>

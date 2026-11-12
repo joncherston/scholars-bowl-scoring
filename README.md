@@ -65,14 +65,17 @@ cp .env.example .env   # then edit; generate SETUP_TOKEN with: openssl rand -hex
 
 ## Backups and restore
 
-- **Automatic:** every 5 minutes on event days (dates of non-test events and sessions) and nightly at 2 AM Central otherwise, in `data/backups/` (SQLite online backups, safe while running). Event-day snapshots are all kept; the newest 14 nightlies are kept.
+- **Automatic:** every 5 minutes on event days (dates of non-test events and sessions; practice events don't count) and weekly at 2 AM Central otherwise, in `data/backups/` (SQLite online backups, safe while running). The server keeps only recent snapshots: the newest weekly and off-server snapshot, the newest 3 of each other kind (none older than 30 days), and event-day snapshots for 30 days. Older and nightly copies live off the server (below).
 - **Also:** before every deploy, migration, registration import, and results-file import.
 - **Admin page:** "Back up now" and "Download full backup"; per-event "Export everything to Excel now".
-- **Off the server:** `./deploy/pull-backups.sh` takes a fresh snapshot and copies all snapshots to `~/ScholarsBowlBackups` (`--watch` repeats every 10 minutes; leave it running on event day). A nightly 2:30 AM job is in `~/Library/LaunchAgents/edu.suscc.scholarsbowl.pull-backups.plist` (template: `deploy/pull-backups.plist.example`). Load it with:
+- **Off the server:** `./deploy/pull-backups.sh` takes a fresh snapshot and copies the server's snapshots to `~/ScholarsBowlBackups` (`--watch` repeats every 10 minutes; leave it running on event day). This computer keeps 30 days of copies, plus every event-day snapshot and the pre-deploy snapshots from the week before and after an event, for good (rules in `deploy/backup-retention.sh`). A run that can't take a fresh snapshot removes nothing.
+- **Nightly copy (macOS):** a 2:30 AM launchd job (template: `deploy/pull-backups.plist.example`; fill in the paths). Put it in `~/Library/LaunchAgents/edu.suscc.scholarsbowl.pull-backups.plist` and load it with:
 
   ```bash
   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/edu.suscc.scholarsbowl.pull-backups.plist
   ```
+
+  If the home folder is on a drive with ownership turned off (an external SSD, for example), launchd rejects plists there: `launchctl bootstrap` says "5: Input/output error" and the system log says "bad ownership/permissions". Put the plist in `/Library/LaunchAgents` instead, owned by `root:wheel`, and load it from there. `pull.log` in the backup folder shows each run.
 
 **Restore** a snapshot on the server:
 
@@ -83,6 +86,22 @@ mkdir -p data/restore-$(date +%s) && mv data/scoring.db* data/restore-$(date +%s
 cp data/backups/<snapshot>.db data/scoring.db
 docker compose start app
 ```
+
+## Tournament formats and awards
+
+Each award division (Scoring settings → Tournament format) is either a **round robin** or **pool play, then a bracket**: the first N rounds are pool play (pools can split a classification by team, e.g. Private Pools A, B, C), pool play seeds a 2-, 4- or 8-team bracket (win/loss ratio → total points → head-to-head; seeding ties are flagged for the head scorekeeper), and the bracket decides places 1–4 (or 1–8) while pool play orders everyone else. Generating a draft plans the bracket games with rooms (`bracket_slots`); the real games are created automatically as soon as their teams are known (`src/lib/server/bracket.ts`), re-paired if a correction changes the seeds before they start, and left alone once staff edit them by hand. Teams outside the bracket can play non-counters.
+
+**Practice (bye) rooms.** Setup → Rooms → *Practice / bye room* (only while the room has no games). Schedule generation and bracket planning skip those rooms; the room's computer can start its own practice games (`/api/scorer/practice`, room PIN session, two teams from one session, non-counting). Games in a practice room are dropped in `computeLive`, so they never reach standings, individuals, brackets, awards, printed sheets or public results, and scoring them never locks the real schedule. Ordinary schedule edits can't move a game into or out of a practice room.
+
+Awards: 1st/2nd (configurable) in each classification, ordered by the division's final places; the overall division winner(s); and all-tournament individual awards per division.
+
+## Website sync (plugin 1.1.0+)
+
+With **Admin → Website connection → Automatic sync** on, an event created on the registration website becomes an event here (sessions, divisions, formats and award places from the website; rooms, round times, staff and scoring rules from the most recent real event), and registrations and student rosters arrive as teams and players. It runs every 10 minutes and right away when the website sends a signed ping to `POST /api/wordpress/notify` (HMAC-SHA256 over `timestamp.body`, keyed with the sha256 of the API token; 5-minute window; replays rejected; no personal data in the ping). Nothing is deleted; teams that have played keep their games; rosters confirmed at check-in are never overwritten; settings changed on the website after scoring starts are reported, not applied.
+
+## Public results
+
+`/results/<event>` (when the event's public switch is on): live match-by-match results, brackets, and team rankings by division and classification. Top individual scorers appear only if the event allows it (first name + last initial, or full name); the default is staff only.
 
 ## Registration import
 

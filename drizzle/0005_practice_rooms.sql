@@ -1,0 +1,1 @@
+ALTER TABLE `rooms` ADD `practice` integer DEFAULT false NOT NULL;

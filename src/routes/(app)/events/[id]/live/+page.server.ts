@@ -24,7 +24,7 @@ export function load({ locals, params, url, depends }) {
 	const session = live.sessions[0];
 	const teamName = (id: string | number) => live.teams.find((t) => t.id === String(id))?.name ?? '?';
 	const usedRooms = new Set(live.matches.map((m) => m.roomId));
-	const rooms = sessionRooms(sessionId).filter((r) => usedRooms.has(r.id) || usedRooms.size === 0).map((r) => {
+	const rooms = sessionRooms(sessionId).filter((r) => !r.practice && (usedRooms.has(r.id) || usedRooms.size === 0)).map((r) => {
 		const row = live.rooms.find((x) => x.id === r.id)!;
 		const ms = live.matches.filter((m) => m.roomId === r.id).sort((a, b) => a.roundNo - b.roundNo);
 		const current = ms.find((m) => m.result.status === 'in_progress' || m.result.status === 'ended') ?? ms.find((m) => m.result.status === 'submitted') ?? ms.find((m) => m.result.status === 'not_started');
@@ -68,8 +68,12 @@ export function load({ locals, params, url, depends }) {
 			losses: r.record.losses,
 			ties: r.record.ties,
 			played: r.record.played,
-			points: r.record.totalPoints
-		}))
+			points: r.record.totalPoints,
+			seed: 'seed' in r ? ((r as { seed?: number }).seed ?? null) : null,
+			bracketResult: 'bracketResult' in r ? ((r as { bracketResult?: string }).bracketResult ?? null) : null,
+			pending: 'pending' in r ? !!(r as { pending?: boolean }).pending : false
+		})),
+		format: (g as { format?: string }).format ?? null
 	});
 	return {
 		sessionId,
@@ -95,6 +99,10 @@ export function load({ locals, params, url, depends }) {
 			}))
 		})),
 		flags: live.flags,
+		// Bracket games still waiting for teams (seeds after pool play, or winners of earlier games).
+		bracketWaiting: live.slots
+			.filter((x) => !x.matchId && x.counts)
+			.map((x) => ({ id: x.id, label: `${x.division} ${x.label}`, roundNo: x.roundNo, room: live.rooms.find((r) => r.id === x.roomId)?.name ?? 'no room' })),
 		individualPlaces: live.rules.awards.individualPlaces,
 		teamPlaces: live.rules.awards.teamPlaces,
 		pendingCounting: live.provisional.pendingMatchIds.length,

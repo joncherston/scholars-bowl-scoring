@@ -182,7 +182,8 @@ describe('SV1 a full afternoon: standings, awards, and Excel match the hand calc
 			['Hawthorn', 8, 0, 0, 0]
 		]);
 		// The tie at 5th is not at an award place, so there is no team tie to resolve; unequal games is a note.
-		expect(live.flags.filter((f) => f.tie?.kind === 'team')).toEqual([]);
+		// Elm, Fir and Ginkgo (all 6A) are tied for the 6A class award (1st and 2nd per class, confirmed Oct 29 2026).
+		expect(live.flags.filter((f) => f.tie?.kind === 'team').map((f) => f.message)).toEqual([expect.stringMatching(/3 6A teams tied for the 6A place 1/)]);
 		expect(live.flags.some((f) => f.kind === 'unequal_games' && f.level === 'info')).toBe(true);
 		// Every round's server-computed score equals what the scorer submitted.
 		expect(live.flags.filter((f) => f.kind === 'submitted_score_mismatch')).toEqual([]);
@@ -203,14 +204,12 @@ describe('SV1 a full afternoon: standings, awards, and Excel match the hand calc
 		expect(alderSubs.every((r) => r.games === 1)).toBe(true);
 	});
 
-	it('finalize is not blocked by the tie at 5th; only individual ties at award places block it until resolved', async () => {
+	it('finalize is blocked by award-place ties (the 6A class tie and individual ties) until resolved', async () => {
 		playDayFixed();
 		const ties = computeLive(eventId).flags.filter((f) => f.tie);
-		expect(ties.every((f) => f.tie!.kind === 'individual')).toBe(true);
-		if (ties.length) {
-			expect(JSON.stringify(await callAction('finalize', { sessionId: String(sessionId) }))).toMatch(/Resolve the ties/);
-			for (const f of ties) await callAction('resolveTie', { kind: 'individual', groupKey: f.tie!.groupKey, ordered: f.tie!.ids.join(','), note: 'QA: sudden-death question' });
-		}
+		expect(ties.filter((f) => f.tie!.kind === 'team')).toHaveLength(1);
+		expect(JSON.stringify(await callAction('finalize', { sessionId: String(sessionId) }))).toMatch(/Resolve the ties/);
+		for (const f of ties) await callAction('resolveTie', { kind: f.tie!.kind, groupKey: f.tie!.groupKey, ordered: f.tie!.ids.join(','), note: 'QA: sudden-death question' });
 		expect(JSON.stringify(await callAction('finalize', { sessionId: String(sessionId) }))).toMatch(/Session finalized/);
 	});
 

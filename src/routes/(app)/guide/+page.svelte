@@ -21,11 +21,28 @@
 				<li><strong>Submit:</strong> read the final score to the moderator, tick the box, and click <em>Submit round</em>. The round then locks. Click <em>Next game</em>.</li>
 			</ol>
 			<div class="box">
+				<h3>Prefer the spreadsheet?</h3>
+				<p>At sign-in choose <em>Start scoring with the spreadsheet</em>: the same scoresheet as past years, a tab for each round, with the room, round, schools and players filled in. Type the moderator's name, then <strong>10</strong> under the player who answered (<strong>0</strong> for a wrong answer) and the points in <em>Bonus Points</em>. Row 26 is the tiebreaker. At the end, click <em>Submit round</em>. Kept score in your own Excel file? Open that round's tab and click <em>Import scores</em>. Switch screens any time from <em>Menu</em>.</p>
+			</div>
+			<div class="box">
+				<h3>In a practice (bye) room?</h3>
+				<p>The screen says <strong>PRACTICE ROOM · scores here never count</strong>. Pick two teams and click <em>Start practice game</em>, then score as usual. Nothing scored there reaches standings, awards or results. Start another from <em>Games → Start a practice game</em> (spreadsheet: <em>New practice game</em>).</p>
+			</div>
+			<div class="box">
 				<h3>Watch the top-right corner</h3>
 				<p><strong>"All changes saved"</strong>: everything is on the server.</p>
 				<p><strong>"Offline — N actions waiting"</strong>: keep scoring and <u>don't close the window</u>; it catches up on its own. If the computer must be closed or restarted while offline, first click <em>Download unsaved results</em> and take the file (flash drive) to the head scorekeeper.</p>
 				<p><strong>Computer died?</strong> Sign in on another computer with the same PIN and choose <em>score on this computer</em>. It continues from the last saved action.</p>
 			</div>
+		</section>
+
+		<section>
+			<h2>Check-in desk</h2>
+			<ol>
+				<li>Open <strong>Check-in</strong> and pick the session. Schools that registered online already have their student list.</li>
+				<li>Click the school and <strong>read the names back to the coach</strong>: <em>Fix spelling</em>, <em>Remove</em> a student who didn't come, or add a substitute (up to 6).</li>
+				<li>Click <strong>Confirm roster &amp; check in</strong>. From then on the website no longer changes that roster.</li>
+			</ol>
 		</section>
 
 		<section>
@@ -39,6 +56,18 @@
 				<li><strong>Finish:</strong> when every counting round is approved, click <em>Finalize session</em>, then Reports → <em>Awards sheet</em> for the ceremony.</li>
 			</ol>
 			<div class="box">
+				<h3>Brackets</h3>
+				<p>When a division's pool-play games are in, the semifinals appear by themselves on the Schedule and on the room computers (seed 1 v 4 and 2 v 3 by win/loss ratio, then total points, then head-to-head). The championship and 3rd-place game appear as soon as the semifinals are submitted. A tie for a seed shows in <em>Needs attention</em> with <em>Resolve tie</em>. To start early, Schedule → <em>Create bracket games now</em>.</p>
+			</div>
+			<div class="box">
+				<h3>Practice (bye) rooms</h3>
+				<p>Setup → Rooms: tick <em>Practice / bye room</em> for each bye room (before any games are put in it). The schedule and brackets leave those rooms out, and anything scored there never counts or shows publicly. Practice games are listed on the Schedule under <em>Practice rooms</em>, where they can be added or removed.</p>
+			</div>
+			<div class="box">
+				<h3>Changes on the day</h3>
+				<p>Room changed? Rename the room or drag the game on the Schedule. Different pairing? Click the game and change the teams (a bracket game changed by hand stays as you set it). A game won't be played? Delete it. A student can't make it? Check-in → <em>Remove</em>. A team doesn't show? <em>Record forfeit</em>.</p>
+			</div>
+			<div class="box">
 				<h3>A team forfeits</h3>
 				<p>Not present within five minutes, a late school's first round, or a team that went home: open the round, choose the team under <em>Record forfeit</em>, and give a reason. The opponent gets the win and neither team scores; it counts as final with no separate approval, and the room's computer shows "Forfeit recorded — nothing to score". If a team withdraws mid-event, the Live tab lists its unplayed games with <em>Record forfeits for all remaining games</em>. To undo a forfeit, void it in the round's action history.</p>
 			</div>
@@ -48,7 +77,7 @@
 			</div>
 			<div class="box">
 				<h3>Rules at a glance (defaults)</h3>
-				<p>Tossups 10 points; no powers or negs. Bonuses only for the team that answered the tossup; partial credit per part. Individual scores count tossups only. Tiebreaker points decide the game but never count toward total points or individual scores. A forfeit is a win for the opponent with no points for either team. Non-counter games never count. Standings: rounds won, then total points, then head-to-head. Awards (team and individual) go by division: Private, Public 1A–3A, and Public 4A–7A.</p>
+				<p>Tossups 10 points; no powers or negs. Bonuses only for the team that answered the tossup; partial credit per part. Individual scores count tossups only. Tiebreaker points decide the game but never count toward total points or individual scores. A forfeit is a win for the opponent with no points for either team. Non-counter games and practice-room games never count. Standings: win/loss ratio (or rounds won), then total points, then head-to-head. Awards: 1st and 2nd in each classification, the overall winner of each division (Private, Public 1A–3A, Public 4A–7A), and all-tournament individual awards for each division's top scorers.</p>
 			</div>
 		</section>
 	</div>

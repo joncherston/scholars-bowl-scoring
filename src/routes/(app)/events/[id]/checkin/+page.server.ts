@@ -5,7 +5,7 @@ import { requireEventRole } from '$lib/server/guard';
 import { cleanName } from '$lib/server/registrations';
 import { addPlayerToTeam, listTeams, teamRoster } from '$lib/server/teams';
 import { fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 export function load({ locals, params, url }) {
 	const id = eventIdParam(params);
@@ -23,6 +23,15 @@ function teamIn(eventId: number, teamId: number) {
 	return getDb().select().from(schema.teams).where(and(eq(schema.teams.id, teamId), eq(schema.teams.eventId, eventId))).get();
 }
 
+/** A roster edited by check-in staff is theirs: the website sync no longer changes it. */
+function confirmRoster(teamId: number, by: string) {
+	getDb()
+		.update(schema.teams)
+		.set({ rosterConfirmedAt: new Date().toISOString(), rosterConfirmedBy: by })
+		.where(and(eq(schema.teams.id, teamId), isNull(schema.teams.rosterConfirmedAt)))
+		.run();
+}
+
 const GRADES = new Set(['', '6', '7', '8', '9', '10', '11', '12']);
 
 export const actions = {
@@ -35,7 +44,12 @@ export const actions = {
 		const arrived = f.get('arrived') === '1';
 		getDb()
 			.update(schema.teams)
-			.set(arrived ? { arrivedAt: new Date().toISOString(), arrivedBy: user.name } : { arrivedAt: null, arrivedBy: null })
+			// Checking a team in also confirms its roster: from then on the website sync leaves it alone.
+			.set(
+				arrived
+					? { arrivedAt: new Date().toISOString(), arrivedBy: user.name, ...(team.rosterConfirmedAt ? {} : { rosterConfirmedAt: new Date().toISOString(), rosterConfirmedBy: user.name }) }
+					: { arrivedAt: null, arrivedBy: null }
+			)
 			.where(eq(schema.teams.id, team.id))
 			.run();
 		audit(`user:${user.id}`, arrived ? 'team_checked_in' : 'team_check_in_undone', { teamId: team.id, name: team.name }, eventId);
@@ -61,6 +75,7 @@ export const actions = {
 			return fail(400, { error: `${firstName} ${lastName} is already on this team.`, teamId: team.id });
 		const db = getDb();
 		const playerId = db.transaction((tx) => addPlayerToTeam(tx, team.id, { firstName, lastName, preferredName, grade }));
+		confirmRoster(team.id, user.name);
 		audit(`user:${user.id}`, 'player_added', { teamId: team.id, playerId, firstName, lastName }, eventId);
 		return { teamId: team.id, added: true };
 	},
@@ -81,6 +96,7 @@ export const actions = {
 		const db = getDb();
 		const before = db.select().from(schema.players).where(eq(schema.players.id, playerId)).get();
 		db.update(schema.players).set({ firstName, lastName, preferredName, grade: grade || null }).where(eq(schema.players.id, playerId)).run();
+		confirmRoster(team.id, user.name);
 		audit(`user:${user.id}`, 'player_updated', { teamId: team.id, playerId, before, after: { firstName, lastName, preferredName, grade } }, eventId);
 		return { teamId: team.id };
 	},
@@ -97,6 +113,7 @@ export const actions = {
 			.set({ removed: true })
 			.where(and(eq(schema.rosterEntries.teamId, team.id), eq(schema.rosterEntries.playerId, playerId)))
 			.run();
+		confirmRoster(team.id, user.name);
 		audit(`user:${user.id}`, 'player_removed_from_roster', { teamId: team.id, playerId }, eventId);
 		return { teamId: team.id };
 	}

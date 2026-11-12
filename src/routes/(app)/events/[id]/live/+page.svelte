@@ -208,7 +208,7 @@
 								{#each g.rows as r (r.teamId)}
 									<tr class:award={!showPools && r.place <= data.teamPlaces}>
 										<td>{r.place}{#if r.tied}&nbsp;<span class="badge bad">tie</span>{/if}{#if r.resolved}&nbsp;<span class="badge info" title={r.resolved}>tie decided</span>{/if}</td>
-										<td>{r.name}</td>
+										<td>{r.name}{#if r.bracketResult}&nbsp;<span class="badge info">{r.bracketResult}</span>{:else if r.seed}&nbsp;<span class="muted small">seed {r.seed}</span>{/if}</td>
 										<td class="num">{r.wins}–{r.losses}{r.ties ? `–${r.ties}` : ''}</td>
 										<td class="num">{formatPoints(r.points)}</td>
 									</tr>
@@ -219,6 +219,13 @@
 				{/each}
 			</div>
 			<div>
+				{#if data.bracketWaiting.length}
+					<div class="card stand">
+						<h3>Bracket games waiting for teams</h3>
+						<p class="muted small">Created automatically when their teams are known. To create them early, use Schedule → Create bracket games now.</p>
+						<ul class="small">{#each data.bracketWaiting as b (b.id)}<li>{b.label} — round {b.roundNo}, {b.room}</li>{/each}</ul>
+					</div>
+				{/if}
 				<h2 class="sec">Needs attention</h2>
 				{#each data.withdrawn as w (w.teamId)}
 					<div class="card withdrawn">

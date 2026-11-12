@@ -85,13 +85,18 @@
 								<span class="badge ok" style="font-size: 1rem; padding: 6px 12px">✓ Checked in</span>
 								<button class="btn ghost small" type="submit">Undo</button>
 							{:else}
-								<button class="btn large" type="submit">Mark arrived</button>
+								<button class="btn large" type="submit">{selected.roster.length ? 'Confirm roster & check in' : 'Mark arrived'}</button>
 							{/if}
 						</form>
 					</div>
 					{#if formError && formError.teamId === selected.id}<div class="alert error" role="alert" style="margin-top: 12px">{formError.error}</div>{/if}
 
 					<h3 style="margin-top: 18px">Players <span class="muted small">{selected.roster.length} of {data.maxPlayers} · 4 play at a time</span></h3>
+					{#if !selected.rosterConfirmedAt && selected.roster.some((p) => p.wpStudentId)}
+						<div class="alert info small" role="status">Pre-filled from the coach's registration. Read the names back to the coach, fix anything that's changed, then confirm.</div>
+					{:else if selected.rosterConfirmedAt}
+						<p class="muted small">Roster confirmed by {selected.rosterConfirmedBy ?? 'staff'}.</p>
+					{/if}
 					{#if selected.roster.length}
 						<table class="data">
 							<thead><tr><th>#</th><th>Name</th><th>Goes by</th><th>Grade</th><th></th></tr></thead>

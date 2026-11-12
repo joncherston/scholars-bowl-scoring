@@ -75,11 +75,11 @@ export async function adminContext(browser: Browser) {
 }
 
 /** Sign a fresh browser context in to a room with its PIN and wait for the scorer. */
-export async function roomLogin(page: Page, pin: string) {
+export async function roomLogin(page: Page, pin: string, mode: 'screen' | 'sheet' = 'screen') {
 	await page.goto('/room');
 	await page.getByLabel('Room PIN').fill(pin);
-	await page.getByRole('button', { name: 'Start scoring' }).click();
-	await page.waitForURL('**/scorer');
+	await page.getByRole('button', { name: mode === 'sheet' ? /with the spreadsheet/ : /with the new screen/ }).click();
+	await page.waitForURL(mode === 'sheet' ? '**/sheet' : '**/scorer');
 }
 
 export const score = (page: Page, team: string) => page.getByLabel(`${team} score`);

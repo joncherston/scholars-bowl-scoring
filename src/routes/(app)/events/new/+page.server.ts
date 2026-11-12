@@ -37,6 +37,7 @@ export const actions = {
 		let classifications = DEFAULT_CLASSIFICATIONS;
 		let sessions = defaultSessions(eventDate);
 		let roomNames = Array.from({ length: roomCount }, (_, i) => `Room ${i + 1}`);
+		let practiceRoomNames: string[] = [];
 
 		if (source.startsWith('template:')) {
 			const t = RULE_TEMPLATES.find((x) => x.id === source.slice(9));
@@ -50,10 +51,13 @@ export const actions = {
 			settingsSource = `copy of "${src.event.name}"`;
 			classifications = src.classifications;
 			if (src.sessions.length) sessions = src.sessions.map((s) => ({ ...s, date: eventDate }));
-			if (src.roomNames.length && f.get('copyRooms') === 'on') roomNames = src.roomNames;
+			if (src.roomNames.length && f.get('copyRooms') === 'on') {
+				roomNames = src.roomNames;
+				practiceRoomNames = src.practiceRoomNames;
+			}
 		}
 
-		const id = createEvent({ name, eventDate, isTest, classifications, sessions, roomNames, settings, settingsSource }, admin.name);
+		const id = createEvent({ name, eventDate, isTest, classifications, sessions, roomNames, practiceRoomNames, settings, settingsSource }, admin.name);
 		audit(`user:${admin.id}`, 'event_created', { name, eventDate, isTest, settingsSource, rooms: roomNames.length }, id);
 		redirect(303, `/events/${id}`);
 	},
